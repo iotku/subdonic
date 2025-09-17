@@ -11,6 +11,7 @@ import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Member;
+import discord4j.core.spec.VoiceChannelJoinSpec;
 import discord4j.discordjson.json.ApplicationInfoData;
 import discord4j.discordjson.possible.Possible;
 import org.slf4j.Logger;
@@ -44,11 +45,12 @@ public class Bot {
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
                     GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
-                    return channel.join(spec -> spec.setProvider(manager.getProvider()))
+
+                    // NOTE: We currently run depreciated NullAudioReceiver to avoid message spam, we don't care about incoming audio
+                    return channel.join(VoiceChannelJoinSpec.builder().provider(manager.getProvider()).selfDeaf(true).build())
                             .doOnNext(vc -> {
                                 logger.info("Joined voice channel {}", vc.getChannelId());
 
-                                // Load and play your FLAC file
                                 GuildAudioManager.getPlayerManager().loadItem("music/sample-12s.mp3", new AudioLoadResultHandler() {
                                     @Override
                                     public void trackLoaded(AudioTrack track) {
@@ -69,7 +71,7 @@ public class Bot {
                                     }
                                 });
                             });
-                })
+                }).doOnError(e -> logger.info("VOICE error: {}", e.getMessage()))
                 .then());
     }
 
