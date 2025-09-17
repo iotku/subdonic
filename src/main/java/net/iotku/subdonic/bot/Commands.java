@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Commands {
     private static final char DEFAULT_ACTION_CHAR = '!';
     private static final Map<Snowflake, Character> guildActionChars = new ConcurrentHashMap<>();
-    private static final Logger logger = LoggerFactory.getLogger(Bot.class);
+    private static final Logger logger = LoggerFactory.getLogger(Commands.class);
     private static final Map<String, Command> commands = new HashMap<>();
 
     private boolean messageIsAdmin(MessageCreateEvent event) { // TODO: There's probably a neater way to do this
