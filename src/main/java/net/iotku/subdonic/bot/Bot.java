@@ -1,34 +1,72 @@
 package net.iotku.subdonic.bot;
 
+import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClientBuilder;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.entity.Message;
 import discord4j.core.object.entity.channel.MessageChannel;
+import discord4j.discordjson.json.ApplicationInfoData;
+import discord4j.discordjson.possible.Possible;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
 
 @Component
 @SuppressWarnings("unused") // SpringBoot loads this via the @Component annotation
 public class Bot {
+    private final GatewayDiscordClient client;
     private static final Logger logger = LoggerFactory.getLogger(Bot.class);
+    private Long ownerId;
+    private static final int MAX_RETRY = 5; // Most times we should attempt to repeat a network action
 
     public Bot(@Value("${discord.token}") String token) {
-        GatewayDiscordClient client = DiscordClientBuilder.create(token).build().login().block();
+        client = DiscordClientBuilder.create(token).build().login().block();
         // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
         assert client != null;
         client.on(ReadyEvent.class).subscribe(event -> logger.info("Discord client is ready"));
+
+        fetchOwnerId();
+
         client.on(MessageCreateEvent.class).subscribe(event -> {
             Message message = event.getMessage();
             logger.info("Bot recieved msg: {}", message);
             if ("!ping".equals(message.getContent())) {
                 MessageChannel channel = message.getChannel().block();
                 assert channel != null;
-                channel.createMessage("Pong!").block();
+                message.getAuthor().ifPresent(user -> {
+                    if (user.getId().asLong() == ownerId) {
+                        channel.createMessage("You're my owner, " + ownerId + "!").block();
+                    }
+                });
+                channel.createMessage("pong").block();
             }
         });
     }
+
+    private void fetchOwnerId() {
+        for (int attempt = 0; attempt < MAX_RETRY; attempt++) {
+            this.ownerId = client.rest().getApplicationInfo()
+                    .map(ApplicationInfoData::owner)
+                    .map(Possible::toOptional)
+                    .flatMap(Mono::justOrEmpty)
+                    .map(user -> Snowflake.asLong(user.id()))
+                    .timeout(Duration.ofSeconds(10))
+                    .doOnError(e -> logger.info("Failed to fetch owner ID: {}", e.getMessage()))
+                    .block();
+            if (this.ownerId != null && this.ownerId != 0) break;
+        }
+
+        if (this.ownerId == null || this.ownerId == 0) {
+            throw new RuntimeException("Could not determine ownerId");
+        }
+
+        logger.info("OwnerId set to: " + ownerId);
+    }
+
 }
