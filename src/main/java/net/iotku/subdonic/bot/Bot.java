@@ -7,24 +7,26 @@ import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.entity.Message;
 import discord4j.core.object.entity.channel.MessageChannel;
-import discord4j.discordjson.json.gateway.Ready;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class Bot {
-    private GatewayDiscordClient client;
+    private static final Logger logger = LoggerFactory.getLogger(Bot.class);
 
     public Bot(@Value("${discord.token}") String token) {
-        this.client = DiscordClientBuilder.create(token).build().login().block();
-
+        GatewayDiscordClient client = DiscordClientBuilder.create(token).build().login().block();
+        // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
         assert client != null;
-        client.on(ReadyEvent.class).subscribe(event -> System.out.println("Discord client is ready"));
+        client.on(ReadyEvent.class).subscribe(event -> logger.info("Discord client is ready"));
         client.on(MessageCreateEvent.class).subscribe(event -> {
             Message message = event.getMessage();
-            System.out.println("Bot recieved msg: " + message);
+            logger.info("Bot recieved msg: {}", message);
             if ("!ping".equals(message.getContent())) {
                 MessageChannel channel = message.getChannel().block();
+                assert channel != null;
                 channel.createMessage("Pong!").block();
             }
         });
