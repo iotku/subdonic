@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class GuildAudioManager {
 
-    public static final AudioPlayerManager PLAYER_MANAGER;
+    private static final AudioPlayerManager PLAYER_MANAGER;
 
     static {
         PLAYER_MANAGER = new DefaultAudioPlayerManager();

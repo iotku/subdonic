@@ -25,8 +25,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import static net.iotku.subdonic.bot.GuildAudioManager.PLAYER_MANAGER;
-
 @Component
 @SuppressWarnings("unused") // SpringBoot loads this via the @Component annotation
 public class Bot {
@@ -39,33 +37,19 @@ public class Bot {
     private static final Map<String, Command> commands = new HashMap<>();
 
     static {
-
         commands.put("ping", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
         commands.put("pong", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
-    }
-
-    public Bot(@Value("${discord.token}") String token) {
-
-//        AudioTrackScheduler scheduler = new AudioTrackScheduler(player);
-
-
         commands.put("join", event -> Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
                     GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
-
-//                    // Create a player and provider for this session
-//                    final AudioPlayer player = PLAYER_MANAGER.createPlayer();
-//                    AudioProvider provider = new LavaPlayerAudioProvider(PLAYER_MANAGER.createPlayer());
-
-                    // Join voice channel with our provider
                     return channel.join(spec -> spec.setProvider(manager.getProvider()))
                             .doOnNext(vc -> {
                                 logger.info("Joined voice channel {}", vc.getChannelId());
 
                                 // Load and play your FLAC file
-                                PLAYER_MANAGER.loadItem("music/sample-12s.mp3", new AudioLoadResultHandler() {
+                                GuildAudioManager.getPlayerManager().loadItem("music/sample-12s.mp3", new AudioLoadResultHandler() {
                                     @Override
                                     public void trackLoaded(AudioTrack track) {
                                         logger.info("Loading: {}", track.getInfo().uri);
@@ -87,18 +71,17 @@ public class Bot {
                             });
                 })
                 .then());
+    }
 
-
-
+    public Bot(@Value("${discord.token}") String token) {
         // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
         client = DiscordClientBuilder.create(token).build().login().block();
         assert client != null;
+        handleEvents();
         fetchOwnerId();
-        run();
     }
 
-    private void run() {
-
+    private void handleEvents() {
         client.on(ReadyEvent.class).subscribe(event -> logger.info("Discord client is ready"));
 
         client.getEventDispatcher().on(MessageCreateEvent.class)
@@ -108,7 +91,6 @@ public class Bot {
                                 .flatMap(entry -> entry.getValue().execute(event))
                                 .next()))
                 .subscribe();
-
     }
 
     private void fetchOwnerId() {
