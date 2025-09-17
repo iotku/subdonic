@@ -1,14 +1,9 @@
 package net.iotku.subdonic.bot;
 
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
-import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
-import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
-import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
-import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import com.sedmelluq.discord.lavaplayer.track.playback.NonAllocatingAudioFrameBuffer;
 import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClientBuilder;
 import discord4j.core.GatewayDiscordClient;
@@ -18,7 +13,6 @@ import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Member;
 import discord4j.discordjson.json.ApplicationInfoData;
 import discord4j.discordjson.possible.Possible;
-import discord4j.voice.AudioProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +24,8 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+
+import static net.iotku.subdonic.bot.GuildAudioManager.PLAYER_MANAGER;
 
 @Component
 @SuppressWarnings("unused") // SpringBoot loads this via the @Component annotation
@@ -48,63 +44,44 @@ public class Bot {
         commands.put("pong", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
     }
 
-
-
-    public static final AudioPlayerManager PLAYER_MANAGER;
-
-    static {
-        PLAYER_MANAGER = new DefaultAudioPlayerManager();
-        // This is an optimization strategy that Discord4J can utilize to minimize allocations
-        PLAYER_MANAGER.getConfiguration().setFrameBufferFactory(NonAllocatingAudioFrameBuffer::new);
-        AudioSourceManagers.registerRemoteSources(PLAYER_MANAGER);
-        AudioSourceManagers.registerLocalSource(PLAYER_MANAGER);
-    }
-
     public Bot(@Value("${discord.token}") String token) {
-        // Initialize LavaPlayer
-        final AudioPlayerManager playerManager = new DefaultAudioPlayerManager();
-        playerManager.getConfiguration()
-                .setFrameBufferFactory(NonAllocatingAudioFrameBuffer::new);
-        AudioSourceManagers.registerRemoteSources(playerManager);
-        final AudioPlayer player = playerManager.createPlayer();
+
+//        AudioTrackScheduler scheduler = new AudioTrackScheduler(player);
 
 
         commands.put("join", event -> Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
-                    // Create a player and provider for this session
+                    GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
 
-                    AudioProvider provider = new LavaPlayerAudioProvider(PLAYER_MANAGER.createPlayer());
+//                    // Create a player and provider for this session
+//                    final AudioPlayer player = PLAYER_MANAGER.createPlayer();
+//                    AudioProvider provider = new LavaPlayerAudioProvider(PLAYER_MANAGER.createPlayer());
 
                     // Join voice channel with our provider
-                    return channel.join(spec -> spec.setProvider(provider))
+                    return channel.join(spec -> spec.setProvider(manager.getProvider()))
                             .doOnNext(vc -> {
                                 logger.info("Joined voice channel {}", vc.getChannelId());
 
                                 // Load and play your FLAC file
-                                PLAYER_MANAGER.loadItem("music/test.flac", new AudioLoadResultHandler() {
+                                PLAYER_MANAGER.loadItem("music/sample-12s.mp3", new AudioLoadResultHandler() {
                                     @Override
                                     public void trackLoaded(AudioTrack track) {
-                                        logger.info("Loaded track: {}", track.getInfo().title);
-                                        player.playTrack(track);
+                                        logger.info("Loading: {}", track.getInfo().uri);
+                                        manager.getPlayer().startTrack(track, false);
                                     }
 
                                     @Override
                                     public void playlistLoaded(AudioPlaylist playlist) {
-                                        AudioTrack first = playlist.getTracks().get(0);
-                                        logger.info("Loaded playlist, playing first track: {}", first.getInfo().title);
-                                        player.playTrack(first);
                                     }
 
                                     @Override
                                     public void noMatches() {
-                                        logger.warn("No matches found for music/test.flac");
                                     }
 
                                     @Override
                                     public void loadFailed(FriendlyException exception) {
-                                        logger.error("Failed to load track", exception);
                                     }
                                 });
                             });
