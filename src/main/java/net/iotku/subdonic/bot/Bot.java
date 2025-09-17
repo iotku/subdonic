@@ -1,6 +1,5 @@
 package net.iotku.subdonic.bot;
 
-import discord4j.core.DiscordClient;
 import discord4j.core.DiscordClientBuilder;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
@@ -13,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
+@SuppressWarnings("unused") // SpringBoot loads this via the @Component annotation
 public class Bot {
     private static final Logger logger = LoggerFactory.getLogger(Bot.class);
 
