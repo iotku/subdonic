@@ -1,17 +1,10 @@
 package net.iotku.subdonic.bot;
 
-import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
-import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
-import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
-import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClientBuilder;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
-import discord4j.core.object.VoiceState;
-import discord4j.core.object.entity.Member;
-import discord4j.core.spec.VoiceChannelJoinSpec;
 import discord4j.discordjson.json.ApplicationInfoData;
 import discord4j.discordjson.possible.Possible;
 import org.slf4j.Logger;
@@ -22,58 +15,16 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+
 
 @Component
 @SuppressWarnings("unused") // SpringBoot loads this via the @Component annotation
 public class Bot {
-    private final GatewayDiscordClient client;
-    private static final Logger logger = LoggerFactory.getLogger(Bot.class);
-    private Long ownerId;
     private static final int MAX_RETRY = 5; // Most times we should attempt to repeat a network action
-    private static final char ACTION_CHAR = '!'; // TODO: Make this configurable per guild
+    private static final Logger logger = LoggerFactory.getLogger(Bot.class);
 
-    private static final Map<String, Command> commands = new HashMap<>();
-
-    static {
-        commands.put("ping", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
-        commands.put("pong", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
-        commands.put("join", event -> Mono.justOrEmpty(event.getMember())
-                .flatMap(Member::getVoiceState)
-                .flatMap(VoiceState::getChannel)
-                .flatMap(channel -> {
-                    GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
-
-                    // NOTE: We currently run depreciated NullAudioReceiver to avoid message spam, we don't care about incoming audio
-                    return channel.join(VoiceChannelJoinSpec.builder().provider(manager.getProvider()).selfDeaf(true).build())
-                            .doOnNext(vc -> {
-                                logger.info("Joined voice channel {}", vc.getChannelId());
-
-                                GuildAudioManager.getPlayerManager().loadItem("music/sample-12s.mp3", new AudioLoadResultHandler() {
-                                    @Override
-                                    public void trackLoaded(AudioTrack track) {
-                                        logger.info("Loading: {}", track.getInfo().uri);
-                                        manager.getPlayer().startTrack(track, false);
-                                    }
-
-                                    @Override
-                                    public void playlistLoaded(AudioPlaylist playlist) {
-                                    }
-
-                                    @Override
-                                    public void noMatches() {
-                                    }
-
-                                    @Override
-                                    public void loadFailed(FriendlyException exception) {
-                                    }
-                                });
-                            });
-                }).doOnError(e -> logger.info("VOICE error: {}", e.getMessage()))
-                .then());
-    }
+    private final GatewayDiscordClient client;
+    private static Long ownerId; // The owner of the bot according to Discord
 
     public Bot(@Value("${discord.token}") String token) {
         // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
@@ -86,10 +37,11 @@ public class Bot {
     private void handleEvents() {
         client.on(ReadyEvent.class).subscribe(event -> logger.info("Discord client is ready"));
 
+        // React to command chat messages
         client.getEventDispatcher().on(MessageCreateEvent.class)
                 .flatMap(event -> Mono.just(event.getMessage().getContent())
-                        .flatMap(content -> Flux.fromIterable(commands.entrySet())
-                                .filter(entry -> content.startsWith(ACTION_CHAR + entry.getKey()))
+                        .flatMap(content -> Flux.fromIterable(Commands.get().entrySet())
+                                .filter(entry -> content.startsWith(Commands.getActionChar(event.getGuildId()) + entry.getKey()))
                                 .flatMap(entry -> entry.getValue().execute(event))
                                 .next()))
                 .subscribe();
@@ -97,7 +49,7 @@ public class Bot {
 
     private void fetchOwnerId() {
         for (int attempt = 0; attempt < MAX_RETRY; attempt++) {
-            this.ownerId = client.rest().getApplicationInfo()
+            ownerId = client.rest().getApplicationInfo()
                     .map(ApplicationInfoData::owner)
                     .map(Possible::toOptional)
                     .flatMap(Mono::justOrEmpty)
@@ -105,14 +57,17 @@ public class Bot {
                     .timeout(Duration.ofSeconds(10))
                     .doOnError(e -> logger.info("Failed to fetch owner ID: {}", e.getMessage()))
                     .block();
-            if (this.ownerId != null && this.ownerId != 0) break;
+            if (ownerId != null && ownerId != 0) break;
         }
 
-        if (this.ownerId == null || this.ownerId == 0) {
+        if (ownerId == null || ownerId == 0) {
             throw new RuntimeException("Could not determine ownerId");
         }
 
         logger.info("OwnerId set to: {}", ownerId);
     }
 
+    public static Long getOwnerId() {
+        return ownerId;
+    }
 }
