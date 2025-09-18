@@ -19,19 +19,22 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Commands {
-    private static final char DEFAULT_ACTION_CHAR = '!';
-    private static final Map<Snowflake, Character> guildActionChars = new ConcurrentHashMap<>();
+    private static final String DEFAULT_ACTION_STR = "!";
+    private static final Map<Snowflake, String> guildActionStrs = new ConcurrentHashMap<>();
     private static final Logger logger = LoggerFactory.getLogger(Commands.class);
-    private static final Map<String, Command> commands = new HashMap<>();
-
+    private static final Map<String, Command> COMMANDS = new HashMap<>();
+    private final Bot instance;
+    public Commands(Bot instance) {
+        this.instance = instance;
+    }
     private boolean messageIsAdmin(MessageCreateEvent event) { // TODO: There's probably a neater way to do this
-        return event.getMessage().getAuthor().isPresent() && event.getMessage().getAuthor().get().getId().asLong() == Bot.getOwnerId();
+        return event.getMessage().getAuthor().isPresent() && event.getMessage().getAuthor().get().getId().asLong() == instance.getOwnerId();
     }
 
     static {
-        commands.put("ping", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
-        commands.put("pong", event -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
-        commands.put("join", event -> Mono.justOrEmpty(event.getMember())
+        register("ping", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
+        register("pong", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
+        register("join", (event, args) -> Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
@@ -64,20 +67,46 @@ public class Commands {
                 .then());
     }
 
-    public static Map<String, Command> get() {
-        return commands;
+    public static void register(String name, Command command) {
+        COMMANDS.put(name.toLowerCase(), command);
+    }
+
+    public static Command get(String command) {
+        return COMMANDS.get(command);
+    }
+
+    public boolean isCommand(String content, MessageCreateEvent event) {
+        return content.startsWith(Commands.getActionStr(event.getGuildId()))
+                || event.getMessage().getUserMentionIds().contains(this.instance.getClient().getSelfId());
+    }
+
+    public String stripCommandPrefixOrMentions(String content, MessageCreateEvent event) {
+        String prefix = getActionStr(event.getGuildId());
+        if (content.startsWith(prefix)) {
+            return content.substring(prefix.length()).trim();
+        }
+
+        // Remove self-mentions from message
+        if (event.getMessage().getUserMentionIds().contains(this.instance.getClient().getSelfId())) {
+            String selfId= this.instance.getClient().getSelfId().asString();
+            String str1 = "<@" + selfId + ">";
+            String str2 = "<@!" + selfId + ">";
+            return content.replace(str1, "").replace(str2, "").trim();
+        }
+
+        return content; // fallback to original message
     }
 
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    public static char getActionChar(Optional<Snowflake> guildId) {
+    public static String getActionStr(Optional<Snowflake> guildId) {
         if (guildId.isPresent()) {
-            return guildActionChars.getOrDefault(guildId.get(), DEFAULT_ACTION_CHAR);
+            return guildActionStrs.getOrDefault(guildId.get(), DEFAULT_ACTION_STR);
         }
-        return DEFAULT_ACTION_CHAR;
+        return DEFAULT_ACTION_STR;
     }
 
-    public static void setActionChar(Snowflake guildId, char actionChar) {
-        guildActionChars.put(guildId, actionChar);
-        logger.info("Set {} action char to {}", guildId, actionChar);
+    public static void setActionStr(Snowflake guildId, String actionStr) {
+        guildActionStrs.put(guildId, actionStr);
+        logger.info("Set {} action char to {}", guildId, actionStr);
     }
 }

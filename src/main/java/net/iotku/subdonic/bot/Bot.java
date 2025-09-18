@@ -11,10 +11,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Optional;
 
 
 @Component
@@ -22,15 +23,17 @@ import java.time.Duration;
 public class Bot {
     private static final int MAX_RETRY = 5; // Most times we should attempt to repeat a network action
     private static final Logger logger = LoggerFactory.getLogger(Bot.class);
+    private final Commands commands;
 
     private final GatewayDiscordClient client;
-    private static Long ownerId; // The owner of the bot according to Discord
+    private Long ownerId; // The owner of the bot according to Discord
 
     public Bot(@Value("${discord.token}") String token) {
         // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
         client = DiscordClientBuilder.create(token).build().login().block();
         assert client != null;
         handleEvents();
+        this.commands = new Commands(this);
         fetchOwnerId();
     }
 
@@ -39,17 +42,25 @@ public class Bot {
 
         // React to command chat messages
         client.getEventDispatcher().on(MessageCreateEvent.class)
-                .flatMap(event -> Mono.just(event.getMessage().getContent())
-                        .flatMap(content -> Flux.fromIterable(Commands.get().entrySet())
-                                .filter(entry -> content.startsWith(Commands.getActionChar(event.getGuildId()) + entry.getKey()))
-                                .flatMap(entry -> entry.getValue().execute(event))
-                                .next()))
-                .subscribe();
+                .flatMap(event -> {
+                    String content = event.getMessage().getContent();
+                    if (!commands.isCommand(content, event)) return Mono.empty(); // exit early
+
+                    // args[0] is the command
+                    String[] args = commands.stripCommandPrefixOrMentions(content, event).trim().split("\\s+");
+                    if (args.length == 0) return Mono.empty();
+
+                    String[] cmdArgs = Arrays.copyOfRange(args, 1, args.length);
+                    logger.info("Attempting to run command: {}", Arrays.toString(args));
+                    return Optional.ofNullable(Commands.get(args[0].toLowerCase()))
+                            .map(command -> command.execute(event, cmdArgs))
+                            .orElse(Mono.empty()); // TODO: Maybe add some user feedback that the command was not found
+                }).subscribe();
     }
 
     private void fetchOwnerId() {
         for (int attempt = 0; attempt < MAX_RETRY; attempt++) {
-            ownerId = client.rest().getApplicationInfo()
+            this.ownerId = client.rest().getApplicationInfo()
                     .map(ApplicationInfoData::owner)
                     .map(Possible::toOptional)
                     .flatMap(Mono::justOrEmpty)
@@ -57,17 +68,21 @@ public class Bot {
                     .timeout(Duration.ofSeconds(10))
                     .doOnError(e -> logger.info("Failed to fetch owner ID: {}", e.getMessage()))
                     .block();
-            if (ownerId != null && ownerId != 0) break;
+            if (this.ownerId != null && this.ownerId != 0) break;
         }
 
-        if (ownerId == null || ownerId == 0) {
+        if (this.ownerId == null || this.ownerId == 0) {
             throw new RuntimeException("Could not determine ownerId");
         }
 
         logger.info("OwnerId set to: {}", ownerId);
     }
 
-    public static Long getOwnerId() {
-        return ownerId;
+    public Long getOwnerId() {
+        return this.ownerId;
+    }
+
+    public GatewayDiscordClient getClient() {
+        return client;
     }
 }
