@@ -29,6 +29,10 @@ public class subsonicController {
         this.subsonic = config.subsonic();
     }
 
+    /**
+     * Test endpoint to verify connection to the Subsonic server
+     * @return raw string indicating the bot has a connection (or not) to the subsonic server
+     */
     @GetMapping("/test")
     public String test() {
         try {
@@ -45,24 +49,42 @@ public class subsonicController {
         }
     }
 
+    /**
+     * Subsonic API search2 method "Standard" Search
+     * <a href="https://www.subsonic.org/pages/api.jsp#search2">API Reference: search2</a>
+     * @param query String describing song title / artist (e.g. "two trucks lemon demon")
+     * @return JSON List of songs relating to query
+     */
     @GetMapping("/search2")
     @ResponseBody
     public List<Child> search2(@RequestParam String query) {
         return subsonic.searching().search2(query).getSongs();
     }
 
+    /**
+     * Subsonic API search 3 method, like search 2 but organized with ID3 tags
+     * <a href="https://www.subsonic.org/pages/api.jsp#search3">API Reference: search3</a>
+     * @param query String describing song title / artist (e.g. "two trucks lemon demon")
+     * @return JSON List of songs relating to query
+     */
     @GetMapping("/search3")
     @ResponseBody
     public List<Child> search3(@RequestParam String query) {
         return subsonic.searching().search3(query).getSongs();
     }
 
+    /**
+     * proxyStream /stream/{id} endpoint
+     * @param id subsonic id from search response for distinct song
+     * @return Stream of audio data provided by the subsonic server
+     * @throws IOException if an error occurs deploying the ResponseEntity
+     */
     @GetMapping("/stream/{id}")
     public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) throws IOException {
         URL url = subsonic.media().stream(id).getUrl();
         // ! NOTE: spaces in the URL will DOOM YOU !
         String safeUrl = url.toString().replace(" ", "%20");
-        InputStream inputStream = new URL(safeUrl).openStream();
+        InputStream inputStream = new URL(safeUrl).openStream(); // TODO: use HttpClient / HttpRequest instead
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(new InputStreamResource(inputStream));
