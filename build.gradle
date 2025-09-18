@@ -23,6 +23,12 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation "com.discord4j:discord4j-core:3.2.9"
 	implementation 'dev.arbjerg:lavaplayer:2.2.4'
+	implementation 'net.beardbot:subsonic-client:0.6.0'
+	// Do I really need these???
+	implementation 'javax.xml.bind:jaxb-api:2.3.1' // Or a compatible version
+	implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.1' // Or a compatible version
+	implementation 'javax.activation:activation:1.1' // If using older JAXB versions
+	// END
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

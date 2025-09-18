@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GuildAudioManager {
-
     private static final AudioPlayerManager PLAYER_MANAGER;
 
     static {
