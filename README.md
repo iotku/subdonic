@@ -1,4 +1,4 @@
-# SubDonic
+# Subdonic
 
 Discord Bot for Subsonic compatible servers.
 
