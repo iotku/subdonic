@@ -10,6 +10,7 @@ import discord4j.common.util.Snowflake;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Member;
+import discord4j.core.object.entity.PartialMember;
 import discord4j.core.spec.VoiceChannelJoinSpec;
 import net.iotku.subdonic.subsonic.Song;
 import reactor.core.publisher.Mono;
@@ -54,7 +55,8 @@ public class Commands {
                 .flatMap(Member::getVoiceState)
                 .flatMap(VoiceState::getChannel)
                 .flatMap(userChannel
-                        -> event.getClient().getSelfMember(event.getGuildId().get()).flatMap(botMember -> botMember.getVoiceState())
+                        -> event.getClient().getSelfMember(event.getGuildId().get()) // TODO: Verify guildId is present
+                        .flatMap(PartialMember::getVoiceState)
                         .flatMap(VoiceState::getChannel)
                         .map(botChannel -> botChannel.getId().equals(userChannel.getId()))
                 )
@@ -68,11 +70,10 @@ public class Commands {
                         ObjectMapper mapper = new ObjectMapper();
                         HttpClient client = HttpClient.newHttpClient();
                         String query = String.join(" ", args);
-                        String url = "http://localhost:8080/api/v1/subsonic/search2?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: XSS Concerns?
+                        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: XSS Concerns?
                         HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
                         HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
 
-                        System.out.println(response.body());
                         List<Song> songs;
                         try {
                             songs = Arrays.asList(mapper.readValue(response.body(), Song[].class));
@@ -81,8 +82,7 @@ public class Commands {
                         }
                         if (songs.isEmpty()) return Mono.empty(); // no results
                         Song song = songs.getFirst();
-                        System.out.println("Found Sound: " + song.title() + " by " + song.artist());
-                        GuildAudioManager manager = GuildAudioManager.of(event.getGuildId().get());
+                        GuildAudioManager manager = GuildAudioManager.of(event.getGuildId().get()); // TODO: Verify guildId is present
                         String audioURL = "http://localhost:8080/api/v1/subsonic/stream/" + URLEncoder.encode(song.id(), StandardCharsets.UTF_8);
                         GuildAudioManager.getPlayerManager().loadItem(audioURL, new AudioLoadResultHandler() {
                             @Override
