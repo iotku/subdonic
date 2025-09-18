@@ -1,0 +1,12 @@
+services:
+  subdonic:
+    build: .
+    env_file: # Or set the environment: variables
+      - .env
+   # environment:
+   #   DISCORD_TOKEN: "Discord-Bot-Token"
+   #   SUBSONIC_URL: "https://your-subsonic-server"
+   #   SUBSONIC_USER: "username"
+   #   SUBSONIC_PASS: "password123"
+    #ports:
+    #  - "8080:8080" # Expose Springboot port, optional
