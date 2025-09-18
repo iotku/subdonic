@@ -28,6 +28,10 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
 
+    # Setup .env to avoid Placeholder issues
+    - name: Copy .env-example to .env
+      run: cp .env-example .env
+
     # Configure Gradle for optimal use in GitHub Actions, including caching of downloaded dependencies.
     # See: https://github.com/gradle/actions/blob/main/setup-gradle/README.md
     - name: Setup Gradle
