@@ -5,9 +5,15 @@ import net.beardbot.subsonic.client.base.SubsonicIncompatibilityException;
 import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.subsonic.restapi.Child;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.List;
 
 @RestController
@@ -49,5 +55,16 @@ public class subsonicController {
     @ResponseBody
     public List<Child> search3(@RequestParam String query) {
         return subsonic.searching().search3(query).getSongs();
+    }
+
+    @GetMapping("/stream/{id}")
+    public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) throws IOException {
+        URL url = subsonic.media().stream(id).getUrl();
+        // ! NOTE: spaces in the URL will DOOM YOU !
+        String safeUrl = url.toString().replace(" ", "%20");
+        InputStream inputStream = new URL(safeUrl).openStream();
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(new InputStreamResource(inputStream));
     }
 }

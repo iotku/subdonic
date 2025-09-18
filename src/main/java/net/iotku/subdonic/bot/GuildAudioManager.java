@@ -12,6 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class GuildAudioManager {
     private static final AudioPlayerManager PLAYER_MANAGER;
+    private final AudioPlayer player;
+    private final AudioTrackScheduler scheduler;
+    private final LavaPlayerAudioProvider provider;
 
     static {
         PLAYER_MANAGER = new DefaultAudioPlayerManager();
@@ -29,10 +32,6 @@ public class GuildAudioManager {
         return MANAGERS.computeIfAbsent(id, ignored -> new GuildAudioManager());
     }
 
-    private final AudioPlayer player;
-    private final AudioTrackScheduler scheduler;
-    private final LavaPlayerAudioProvider provider;
-
     private GuildAudioManager() {
         player = PLAYER_MANAGER.createPlayer();
         scheduler = new AudioTrackScheduler(player);
@@ -48,7 +47,6 @@ public class GuildAudioManager {
     public LavaPlayerAudioProvider getProvider() {
         return provider;
     }
-
     public static AudioPlayerManager getPlayerManager() {
         return PLAYER_MANAGER;
     }

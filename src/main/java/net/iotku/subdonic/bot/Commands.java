@@ -1,5 +1,7 @@
 package net.iotku.subdonic.bot;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
@@ -9,13 +11,18 @@ import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Member;
 import discord4j.core.spec.VoiceChannelJoinSpec;
+import net.iotku.subdonic.subsonic.Song;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Commands {
@@ -40,31 +47,67 @@ public class Commands {
                 .flatMap(channel -> {
                     GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
                     return channel.join(VoiceChannelJoinSpec.builder().provider(manager.getProvider()).selfDeaf(true).build())
-                            .doOnNext(vc -> {
-                                logger.info("Joined voice channel {}", vc.getChannelId());
+                            .doOnError(e -> logger.info("VOICE error: {}", e.getMessage()));
+                            }).then());
 
-                                GuildAudioManager.getPlayerManager().loadItem("music/sample-12s.mp3", new AudioLoadResultHandler() {
-                                    @Override
-                                    public void trackLoaded(AudioTrack track) {
-                                        logger.info("Loading: {}", track.getInfo().uri);
-                                        manager.getPlayer().startTrack(track, false);
-                                    }
+        register("play", (event, args) -> Mono.justOrEmpty(event.getMember())
+                .flatMap(Member::getVoiceState)
+                .flatMap(VoiceState::getChannel)
+                .flatMap(userChannel
+                        -> event.getClient().getSelfMember(event.getGuildId().get()).flatMap(botMember -> botMember.getVoiceState())
+                        .flatMap(VoiceState::getChannel)
+                        .map(botChannel -> botChannel.getId().equals(userChannel.getId()))
+                )
+                .defaultIfEmpty(false) // either both or member not in same voice channel
+                .flatMap(sameChannel -> {
+                    if (!sameChannel) {
+                        return Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Must be in same voice channel to play music!").then();
+                    }
 
-                                    @Override
-                                    public void playlistLoaded(AudioPlaylist playlist) {
-                                    }
+                    return Mono.fromCallable(() -> {
+                        ObjectMapper mapper = new ObjectMapper();
+                        HttpClient client = HttpClient.newHttpClient();
+                        String query = String.join(" ", args);
+                        String url = "http://localhost:8080/api/v1/subsonic/search2?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: XSS Concerns?
+                        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+                        HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
 
-                                    @Override
-                                    public void noMatches() {
-                                    }
+                        System.out.println(response.body());
+                        List<Song> songs;
+                        try {
+                            songs = Arrays.asList(mapper.readValue(response.body(), Song[].class));
+                        } catch (JsonProcessingException e) {
+                            throw new RuntimeException(e);
+                        }
+                        if (songs.isEmpty()) return Mono.empty(); // no results
+                        Song song = songs.getFirst();
+                        System.out.println("Found Sound: " + song.title() + " by " + song.artist());
+                        GuildAudioManager manager = GuildAudioManager.of(event.getGuildId().get());
+                        String audioURL = "http://localhost:8080/api/v1/subsonic/stream/" + URLEncoder.encode(song.id(), StandardCharsets.UTF_8);
+                        GuildAudioManager.getPlayerManager().loadItem(audioURL, new AudioLoadResultHandler() {
+                            @Override
+                            public void trackLoaded(AudioTrack track) {
+                                manager.getPlayer().startTrack(track, false);
+                            }
 
-                                    @Override
-                                    public void loadFailed(FriendlyException exception) {
-                                    }
-                                });
-                            });
-                }).doOnError(e -> logger.info("VOICE error: {}", e.getMessage()))
-                .then());
+                            @Override
+                            public void playlistLoaded(AudioPlaylist playlist) {
+
+                            }
+
+                            @Override
+                            public void noMatches() {
+
+                            }
+
+                            @Override
+                            public void loadFailed(FriendlyException exception) {
+
+                            }
+                        });
+                        return song;
+                    }).then();
+        }));
     }
 
     public static void register(String name, Command command) {

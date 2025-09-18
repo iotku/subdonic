@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
@@ -53,7 +54,13 @@ public class Bot {
                     String[] cmdArgs = Arrays.copyOfRange(args, 1, args.length);
                     logger.info("Attempting to run command: {}", Arrays.toString(args));
                     return Optional.ofNullable(Commands.get(args[0].toLowerCase()))
-                            .map(command -> command.execute(event, cmdArgs))
+                            .map(command -> {
+                                try {
+                                    return command.execute(event, cmdArgs);
+                                } catch (IOException | InterruptedException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            })
                             .orElse(Mono.empty()); // TODO: Maybe add some user feedback that the command was not found
                 }).subscribe();
     }
