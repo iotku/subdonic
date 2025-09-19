@@ -50,6 +50,8 @@ public class Commands {
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
                     GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
+                    // Set lastTextChannel so we know where to put now playing messages
+                    manager.setLastTextChannel(event.getMessage().getChannelId());
                     return manager.joinAndTrack(channel).then();
                 }));
 
@@ -100,6 +102,9 @@ public class Commands {
                     String query = String.join(" ", args);
                     if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
+                    // Set lastTextChannel so we know where to put now playing messages
+                    GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
+
                     return Mono.fromCallable(() -> Search.search3(context, query)).subscribeOn(Schedulers.boundedElastic())
                             .flatMap(songs -> songs.stream().findFirst()
                                     .map(firstSong ->
@@ -117,6 +122,7 @@ public class Commands {
             public void trackLoaded(AudioTrack track) {
                 manager.getPlayer().startTrack(track, false);
                 log.info("Playing: {} - {}", song.artist(), song.title());
+                manager.sendNowPlayingEmbed(song);
             }
 
             @Override
@@ -157,7 +163,7 @@ public class Commands {
 
     public boolean isCommand(String content, MessageCreateEvent event) {
         return content.startsWith(Commands.getPrefix(event.getGuildId()))
-                || event.getMessage().getUserMentionIds().contains(this.instance.getClient().getSelfId());
+                || event.getMessage().getUserMentionIds().contains(Bot.getClient().getSelfId());
     }
 
     public String stripCommandPrefixOrMentions(String content, MessageCreateEvent event) {
@@ -167,8 +173,8 @@ public class Commands {
         }
 
         // Remove self-mentions from message
-        if (event.getMessage().getUserMentionIds().contains(this.instance.getClient().getSelfId())) {
-            String selfId= this.instance.getClient().getSelfId().asString();
+        if (event.getMessage().getUserMentionIds().contains(Bot.getClient().getSelfId())) {
+            String selfId = Bot.getClient().getSelfId().asString();
             String str1 = "<@" + selfId + ">";
             String str2 = "<@!" + selfId + ">";
             return content.replace(str1, "").replace(str2, "").trim();
