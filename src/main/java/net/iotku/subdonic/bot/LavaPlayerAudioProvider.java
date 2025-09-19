@@ -19,6 +19,7 @@ public class LavaPlayerAudioProvider extends AudioProvider {
         frame = new MutableAudioFrame();
         frame.setBuffer(getBuffer());
         this.player = player;
+        player.setVolume(45);
     }
 
     @Override

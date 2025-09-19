@@ -54,6 +54,7 @@ public class GuildAudioManager {
 
     private GuildAudioManager(Snowflake guildId) {
         player = PLAYER_MANAGER.createPlayer();
+        player.setVolume(45);
         scheduler = new AudioTrackScheduler(player);
         provider = new LavaPlayerAudioProvider(player);
         this.guildId = guildId;
