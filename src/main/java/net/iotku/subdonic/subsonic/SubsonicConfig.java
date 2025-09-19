@@ -23,7 +23,8 @@ public class SubsonicConfig {
     @Bean
     public Subsonic subsonic() {
         SubsonicPreferences preferences = new SubsonicPreferences(serverURL, user, pass);
-        preferences.setStreamBitRate(320); // TODO: Investigate possible formats
+//        preferences.setStreamBitRate(320); // I believe flac Ignores this.
+        preferences.setStreamFormat("flac");
         preferences.setClientName("Subdonic Discord Bot");
         return new Subsonic(preferences);
     }
