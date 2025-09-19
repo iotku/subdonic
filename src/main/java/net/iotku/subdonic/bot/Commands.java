@@ -89,13 +89,10 @@ public class Commands {
                             return Mono.empty();
                         }
 
-                        String url = "http://localhost:8080/api/v1/subsonic/search3";
-                        HttpRequest req = HttpRequest.newBuilder()
-                                .uri(URI.create(url))
-                                .header("Content-Type", "application/json")
-                                .POST(HttpRequest.BodyPublishers.ofString("{\"query\":\"" + query + "\"}"))
-                                .build();
+                        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: Sanitation Concerns?
+                        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
                         HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
+
                         List<Song> songs;
                         try {
                             songs = Arrays.asList(mapper.readValue(response.body(), Song[].class));
