@@ -19,12 +19,12 @@ import java.util.List;
 @RestController
 @SuppressWarnings("unused")
 @RequestMapping("/api/v1/subsonic")
-public class subsonicController {
-    private static final Logger log = LoggerFactory.getLogger(subsonicController.class);
+public class SubsonicController {
+    private static final Logger log = LoggerFactory.getLogger(SubsonicController.class);
     private final SubsonicConfig config;
     private final Subsonic subsonic;
 
-    public subsonicController(SubsonicConfig config) {
+    public SubsonicController(SubsonicConfig config) {
         this.config = config;
         this.subsonic = config.subsonic();
     }
