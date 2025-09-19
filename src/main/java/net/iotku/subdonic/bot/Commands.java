@@ -80,7 +80,7 @@ public class Commands {
                                     return Mono.just(false); // bot in a different channel
                                 })
                                 // bot not in any channel, Join User's channel
-                                .switchIfEmpty(GuildAudioManager.of(guildId).joinAndTrack(userChannel).hasElement())
+                                .switchIfEmpty(GuildAudioManager.of(guildId).joinAndTrack(userChannel).thenReturn(true))
                         )
                 )
                 .flatMap(sameChannel -> {
