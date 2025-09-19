@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @SuppressWarnings("unused")
@@ -53,25 +52,25 @@ public class subsonicController {
     /**
      * Subsonic API search2 method "Standard" Search
      * <a href="https://www.subsonic.org/pages/api.jsp#search2">API Reference: search2</a>
-     * @param body JSON request describing song title / artist (e.g. "two trucks lemon demon")
+     * @param query String describing song title / artist (e.g. "two trucks lemon demon")
      * @return JSON List of songs relating to query
      */
-    @PostMapping("/search2")
+    @GetMapping("/search2")
     @ResponseBody
-    public List<Child> search2(@RequestBody Map<String, String> body) {
-        return subsonic.searching().search2(body.get("query")).getSongs();
+    public List<Child> search2(@RequestParam String query) {
+        return subsonic.searching().search2(query).getSongs();
     }
 
     /**
      * Subsonic API search 3 method, like search 2 but organized with ID3 tags
      * <a href="https://www.subsonic.org/pages/api.jsp#search3">API Reference: search3</a>
-     * @param body JSON request describing song title / artist (e.g. "two trucks lemon demon")
+     * @param query String describing song title / artist (e.g. "two trucks lemon demon")
      * @return JSON List of songs relating to query
      */
-    @PostMapping("/search3")
+    @GetMapping("/search3")
     @ResponseBody
-    public List<Child> search3(@RequestBody Map<String, String> body) {
-        return subsonic.searching().search3(body.get("query")).getSongs();
+    public List<Child> search3(@RequestParam String query) {
+        return subsonic.searching().search3(query).getSongs();
     }
 
     /**
