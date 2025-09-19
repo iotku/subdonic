@@ -6,6 +6,7 @@ import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.track.playback.NonAllocatingAudioFrameBuffer;
 import discord4j.common.util.Snowflake;
+import discord4j.voice.VoiceConnection;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +16,7 @@ public class GuildAudioManager {
     private final AudioPlayer player;
     private final AudioTrackScheduler scheduler;
     private final LavaPlayerAudioProvider provider;
+    private VoiceConnection voiceConnection;
 
     static {
         PLAYER_MANAGER = new DefaultAudioPlayerManager();
@@ -50,4 +52,14 @@ public class GuildAudioManager {
     public static AudioPlayerManager getPlayerManager() {
         return PLAYER_MANAGER;
     }
+
+    public VoiceConnection getVoiceConnection() {
+        return voiceConnection;
+    }
+
+    // Setters
+    public void setConnection(VoiceConnection connection) {
+        this.voiceConnection = connection;
+    }
+
 }

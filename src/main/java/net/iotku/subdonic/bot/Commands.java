@@ -7,12 +7,15 @@ import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import discord4j.common.util.Snowflake;
+import discord4j.core.event.domain.VoiceStateUpdateEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Member;
 import discord4j.core.object.entity.PartialMember;
 import discord4j.core.spec.VoiceChannelJoinSpec;
+import discord4j.voice.VoiceConnection;
 import net.iotku.subdonic.subsonic.Song;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +28,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -52,9 +56,41 @@ public class Commands {
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
                     GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
-                    return channel.join(VoiceChannelJoinSpec.builder().provider(manager.getProvider()).selfDeaf(true).build())
-                            .doOnError(e -> logger.info("VOICE error: {}", e.getMessage()));
-                            }).then());
+                    Mono<VoiceConnection> joinMono =  channel.join(VoiceChannelJoinSpec.builder().provider(manager.getProvider()).selfDeaf(true).build());
+                    return joinMono.flatMap(connection -> {
+                        manager.setConnection(connection);
+
+                        Publisher<Boolean> voiceStateCounter = channel.getVoiceStates()
+                                .count()
+                                .map(count -> count == 1L);
+
+                        Mono<Void> onDelay = Mono.delay(Duration.ofSeconds(10))
+                                .filterWhen(ignored -> voiceStateCounter)
+                                .switchIfEmpty(Mono.never())
+                                .then();
+
+                        Mono<Void> onEvent = channel.getClient().getEventDispatcher().on(VoiceStateUpdateEvent.class)
+                                .filter(vue -> vue.getOld().flatMap(VoiceState::getChannelId).map(channel.getId()::equals).orElse(false))
+                                .filterWhen(ignored -> voiceStateCounter)
+                                .next()
+                                .then();
+
+                        return Mono.firstWithSignal(onDelay, onEvent).then(connection.disconnect());
+                    });
+                }));
+
+        register("disconnect", (event, args) -> {
+            Snowflake guildId = event.getGuildId().orElse(null);
+            if (guildId == null) return Mono.empty(); // DMs
+
+            GuildAudioManager manager = GuildAudioManager.of(guildId);
+
+            return manager.getVoiceConnection().disconnect()
+                    .then(event.getMessage()
+                            .getChannel()
+                            .flatMap(ch -> ch.createMessage("Disconnected from voice channel.")))
+                    .then();
+        });
 
         register("play", (event, args) -> Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
@@ -123,7 +159,7 @@ public class Commands {
     private static boolean queryTooLong(MessageCtx ctx, String query) {
         if (query.length() > 1000) {
             logger.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
-                    query.length(), ctx.memberId(), ctx.guildId(), ctx.channelId());
+                    query.length(), ctx.memberId().asLong(), ctx.guildId().asLong(), ctx.channelId().asLong());
             return true;
         }
 
@@ -134,7 +170,7 @@ public class Commands {
         ObjectMapper mapper = new ObjectMapper();
         HttpResponse<String> response;
 
-        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: Sanitation Concerns?
+        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
         HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
         response = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
 
@@ -144,7 +180,7 @@ public class Commands {
         }
 
         try {
-            logger.info("({}:{}) {}: No results found for search {}", ctx.guildId(), ctx.channelId(), ctx.memberId(), query);
+            logger.info("({}:{}) {}: No results found for search {}", ctx.guildId().asLong(), ctx.channelId().asLong(), ctx.memberId().asLong(), query);
             return Arrays.asList(mapper.readValue(response.body(), Song[].class));
         } catch (JsonProcessingException e) {
             logger.error("Failed to parse JSON from Subsonic API", e);
