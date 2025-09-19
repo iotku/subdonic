@@ -16,6 +16,7 @@ import net.iotku.subdonic.subsonic.Song;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.net.URI;
@@ -58,32 +59,36 @@ public class Commands {
         register("play", (event, args) -> Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
                 .flatMap(VoiceState::getChannel)
-                .flatMap(userChannel
-                        -> event.getClient().getSelfMember(event.getGuildId().get()) // TODO: Verify guildId is present
+                .flatMap(userChannel -> Mono.justOrEmpty(event.getGuildId())
+                        .flatMap(guildId -> event.getClient().getSelfMember(guildId)
                         .flatMap(PartialMember::getVoiceState)
                         .flatMap(VoiceState::getChannel)
                         .map(botChannel -> botChannel.getId().equals(userChannel.getId()))
-                )
-                .defaultIfEmpty(false) // either both or member not in same voice channel
+                        )).defaultIfEmpty(false) // either both or member not in same voice channel
                 .flatMap(sameChannel -> {
                     if (!sameChannel) {
-                        return Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Must be in same voice channel to play music!").then();
+                        return event.getMessage().getChannel()
+                                .flatMap(ch ->
+                                        ch.createMessage("Must be in same voice channel to play music!")).then();
                     }
 
-                    return Mono.fromCallable(() -> {
-                        String query = String.join(" ", args);
-                        MessageCtx context = new MessageCtx(
-                                event.getGuildId().orElse(null),
-                                event.getMessage().getChannelId(),
-                                event.getMember().map(Member::getId).orElse(null)
-                        );
+                    if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+                    MessageCtx context = new MessageCtx(
+                            event.getGuildId().get(), // we verified it exists above
+                            event.getMessage().getChannelId(),
+                            event.getMember().map(Member::getId).orElse(null)
+                    );
 
-                        if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+                    String query = String.join(" ", args);
+                    if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
-                        List<Song> songs = search3(context, query);
-                        if (songs.isEmpty()) return Mono.empty(); // no results
-                        return loadTrack(songs.getFirst(), context.guildId());
-                    }).then();
+                    return Mono.fromCallable(() -> search3(context, query)).subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(songs -> songs.stream().findFirst()
+                                    .map(firstSong ->
+                                            Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
+                                                    .subscribeOn(Schedulers.boundedElastic()).then()
+                                    ).orElse(Mono.empty())
+                            );
         }));
     }
 
