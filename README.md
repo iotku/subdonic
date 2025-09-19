@@ -2,6 +2,8 @@
 
 Discord Bot for Subsonic compatible servers.
 
+The bot is currently far from feature complete and considered experimental.
+
 ## Requirements
 
 - Java 21
@@ -16,7 +18,23 @@ Copy `.env-example` -> `.env` and fill with appropriate values for environment v
 
 Then use `gradle run` to launch.
 
-# Thanks / Acknowledgements
+## Roadmap
+
+### Done
+- Join voice channels
+- Play the first search result of a song
+
+## In Progress
+- Show Search Results
+- Pick Specific Song by Id
+- Playback Queue (e.g. add multiple songs)
+
+## Later
+- Web interface for managing playback and settings
+- Admin controls
+- Usage stats & logging
+
+## Thanks / Acknowledgements
 
 Subdonic uses the following libraries
 
