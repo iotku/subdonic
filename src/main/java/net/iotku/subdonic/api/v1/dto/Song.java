@@ -1,4 +1,4 @@
-package net.iotku.subdonic.subsonic;
+package net.iotku.subdonic.api.v1.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
