@@ -15,7 +15,7 @@ public class AudioTrackScheduler extends AudioEventAdapter {
     private final AudioPlayer player;
 
     public AudioTrackScheduler(AudioPlayer player) {
-        // The queue may be modifed by different threads so guarantee memory safety
+        // The queue may be modified by different threads so guarantee memory safety
         // This does not, however, remove several race conditions currently present
         queue = Collections.synchronizedList(new LinkedList<>());
         this.player = player;

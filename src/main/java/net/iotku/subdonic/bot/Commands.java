@@ -70,10 +70,33 @@ public class Commands {
                         ObjectMapper mapper = new ObjectMapper();
                         HttpClient client = HttpClient.newHttpClient();
                         String query = String.join(" ", args);
-                        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: XSS Concerns?
-                        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
-                        HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
 
+                        if (query.length() > 1000) {
+                            String userId = event.getMember()
+                                    .map(m -> m.getId().asString())
+                                    .orElse("unknown-user");
+
+                            String guildId = event.getGuildId()
+                                    .map(Snowflake::asString)
+                                    .orElse("DM-or-unknown-guild");
+
+                            String channelId = event.getMessage()
+                                    .getChannelId()
+                                    .asString();
+
+                            logger.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
+                                    query.length(), userId, guildId, channelId);
+
+                            return Mono.empty();
+                        }
+
+                        String url = "http://localhost:8080/api/v1/subsonic/search3";
+                        HttpRequest req = HttpRequest.newBuilder()
+                                .uri(URI.create(url))
+                                .header("Content-Type", "application/json")
+                                .POST(HttpRequest.BodyPublishers.ofString("{\"query\":\"" + query + "\"}"))
+                                .build();
+                        HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
                         List<Song> songs;
                         try {
                             songs = Arrays.asList(mapper.readValue(response.body(), Song[].class));
