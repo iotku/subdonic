@@ -58,8 +58,7 @@ public class GuildAudioManager {
                                 .build()
                 )
                 .doOnNext(this::setConnection)
-                .flatMap(conn -> {
-                    // === idle disconnect logic ===
+                .flatMap(conn -> { // === idle disconnect logic ===
                     Publisher<Boolean> voiceStateCounter = channel.getVoiceStates()
                             .count()
                             .map(count -> count == 1L); // only the bot left
@@ -79,10 +78,11 @@ public class GuildAudioManager {
                             .then();
 
                     // Disconnect the connection when either fires
-                    return Mono.firstWithSignal(onDelay, onEvent)
-                            .then(conn.disconnect())
-                            .doFinally(sig -> setConnection(null)) // clear connection
-                            .thenReturn(conn); // still return the connection
+                    Mono.firstWithSignal(onDelay, onEvent)
+                            .then(voiceConnection.disconnect())
+                            .subscribe();
+
+                    return Mono.just(voiceConnection); // immediate result
                 });
     }
 
