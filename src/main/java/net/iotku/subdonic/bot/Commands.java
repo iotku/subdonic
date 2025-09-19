@@ -71,19 +71,18 @@ public class Commands {
                         HttpClient client = HttpClient.newHttpClient();
                         String query = String.join(" ", args);
 
+                        String userId = event.getMember()
+                                .map(m -> m.getId().asString())
+                                .orElse("unknown-user");
+
+                        String guildId = event.getGuildId()
+                                .map(Snowflake::asString)
+                                .orElse("DM-or-unknown-guild");
+
+                        String channelId = event.getMessage()
+                                .getChannelId()
+                                .asString();
                         if (query.length() > 1000) {
-                            String userId = event.getMember()
-                                    .map(m -> m.getId().asString())
-                                    .orElse("unknown-user");
-
-                            String guildId = event.getGuildId()
-                                    .map(Snowflake::asString)
-                                    .orElse("DM-or-unknown-guild");
-
-                            String channelId = event.getMessage()
-                                    .getChannelId()
-                                    .asString();
-
                             logger.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
                                     query.length(), userId, guildId, channelId);
 
@@ -103,8 +102,14 @@ public class Commands {
                         } catch (JsonProcessingException e) {
                             throw new RuntimeException(e);
                         }
-                        if (songs.isEmpty()) return Mono.empty(); // no results
+
+                        if (songs.isEmpty()) {
+                            logger.info("{}: No results found for search {}", guildId, query);
+                            return Mono.empty(); // no results
+                        }
+
                         Song song = songs.getFirst();
+                        logger.info("Playing: {} - {}", song.artist(), song.title());
                         GuildAudioManager manager = GuildAudioManager.of(event.getGuildId().get()); // TODO: Verify guildId is present
                         String audioURL = "http://localhost:8080/api/v1/subsonic/stream/" + URLEncoder.encode(song.id(), StandardCharsets.UTF_8);
                         GuildAudioManager.getPlayerManager().loadItem(audioURL, new AudioLoadResultHandler() {
