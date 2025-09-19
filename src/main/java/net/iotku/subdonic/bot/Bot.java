@@ -26,7 +26,7 @@ public class Bot {
     private static final Logger logger = LoggerFactory.getLogger(Bot.class);
     private final Commands commands;
 
-    private final GatewayDiscordClient client;
+    private static GatewayDiscordClient client;
     private Long ownerId; // The owner of the bot according to Discord
 
     public Bot(@Value("${discord.token}") String token) {
@@ -89,7 +89,7 @@ public class Bot {
         return this.ownerId;
     }
 
-    public GatewayDiscordClient getClient() {
+    public static GatewayDiscordClient getClient() {
         return client;
     }
 }
