@@ -1,42 +1,31 @@
 package net.iotku.subdonic.bot;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import discord4j.common.util.Snowflake;
-import discord4j.core.event.domain.VoiceStateUpdateEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Member;
 import discord4j.core.object.entity.PartialMember;
-import discord4j.core.spec.VoiceChannelJoinSpec;
 import discord4j.voice.VoiceConnection;
-import net.iotku.subdonic.subsonic.Song;
-import org.reactivestreams.Publisher;
+
+import net.iotku.subdonic.api.v1.dto.Song;
+import net.iotku.subdonic.client.Search;
+import net.iotku.subdonic.client.Stream;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Commands {
-    private static final String DEFAULT_ACTION_STR = "!";
-    private static final Map<Snowflake, String> guildActionStrs = new ConcurrentHashMap<>();
-    private static final Logger logger = LoggerFactory.getLogger(Commands.class);
-    static HttpClient httpClient = HttpClient.newHttpClient();
+    private static final String DEFAULT_PREFIX = "!";
+    private static final Map<Snowflake, String> guildPrefixes = new ConcurrentHashMap<>();
+    private static final Logger log = LoggerFactory.getLogger(Commands.class);
     private static final Map<String, Command> COMMANDS = new HashMap<>();
     private final Bot instance;
 
@@ -44,6 +33,11 @@ public class Commands {
         this.instance = instance;
     }
 
+    /**
+     * The message event was sent by the instance specified Owner of the Bot (as determined by the Discord API)
+     * @param event a MessageCreateEvent
+     * @return true if the message was sent by The Owner, false otherwise
+     */
     private boolean messageIsAdmin(MessageCreateEvent event) { // TODO: There's probably a neater way to do this
         return event.getMessage().getAuthor().isPresent() && event.getMessage().getAuthor().get().getId().asLong() == instance.getOwnerId();
     }
@@ -56,27 +50,7 @@ public class Commands {
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
                     GuildAudioManager manager = GuildAudioManager.of(channel.getGuildId());
-                    Mono<VoiceConnection> joinMono =  channel.join(VoiceChannelJoinSpec.builder().provider(manager.getProvider()).selfDeaf(true).build());
-                    return joinMono.flatMap(connection -> {
-                        manager.setConnection(connection);
-
-                        Publisher<Boolean> voiceStateCounter = channel.getVoiceStates()
-                                .count()
-                                .map(count -> count == 1L);
-
-                        Mono<Void> onDelay = Mono.delay(Duration.ofSeconds(10))
-                                .filterWhen(ignored -> voiceStateCounter)
-                                .switchIfEmpty(Mono.never())
-                                .then();
-
-                        Mono<Void> onEvent = channel.getClient().getEventDispatcher().on(VoiceStateUpdateEvent.class)
-                                .filter(vue -> vue.getOld().flatMap(VoiceState::getChannelId).map(channel.getId()::equals).orElse(false))
-                                .filterWhen(ignored -> voiceStateCounter)
-                                .next()
-                                .then();
-
-                        return Mono.firstWithSignal(onDelay, onEvent).then(connection.disconnect());
-                    });
+                    return manager.joinAndTrack(channel).then();
                 }));
 
         register("disconnect", (event, args) -> {
@@ -84,8 +58,8 @@ public class Commands {
             if (guildId == null) return Mono.empty(); // DMs
 
             GuildAudioManager manager = GuildAudioManager.of(guildId);
-
-            return manager.getVoiceConnection().disconnect()
+            return Mono.justOrEmpty(manager.getConnection())
+                    .flatMap(VoiceConnection::disconnect)
                     .then(event.getMessage()
                             .getChannel()
                             .flatMap(ch -> ch.createMessage("Disconnected from voice channel.")))
@@ -97,10 +71,18 @@ public class Commands {
                 .flatMap(VoiceState::getChannel)
                 .flatMap(userChannel -> Mono.justOrEmpty(event.getGuildId())
                         .flatMap(guildId -> event.getClient().getSelfMember(guildId)
-                        .flatMap(PartialMember::getVoiceState)
-                        .flatMap(VoiceState::getChannel)
-                        .map(botChannel -> botChannel.getId().equals(userChannel.getId()))
-                        )).defaultIfEmpty(false) // either both or member not in same voice channel
+                                .flatMap(PartialMember::getVoiceState)
+                                .flatMap(VoiceState::getChannel)
+                                .flatMap(botChannel -> {
+                                    if (botChannel.getId().equals(userChannel.getId())) { // bot in same channel
+                                        return Mono.just(true);
+                                    }
+                                    return Mono.just(false); // bot in a different channel
+                                })
+                                // bot not in any channel, Join User's channel
+                                .switchIfEmpty(GuildAudioManager.of(guildId).joinAndTrack(userChannel).hasElement())
+                        )
+                )
                 .flatMap(sameChannel -> {
                     if (!sameChannel) {
                         return event.getMessage().getChannel()
@@ -118,7 +100,7 @@ public class Commands {
                     String query = String.join(" ", args);
                     if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
-                    return Mono.fromCallable(() -> search3(context, query)).subscribeOn(Schedulers.boundedElastic())
+                    return Mono.fromCallable(() -> Search.search3(context, query)).subscribeOn(Schedulers.boundedElastic())
                             .flatMap(songs -> songs.stream().findFirst()
                                     .map(firstSong ->
                                             Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
@@ -129,13 +111,12 @@ public class Commands {
     }
 
     private static Song loadTrack(Song song, Snowflake guildId) {
-        String audioURL = "http://localhost:8080/api/v1/subsonic/stream/" + URLEncoder.encode(song.id(), StandardCharsets.UTF_8);
         GuildAudioManager manager = GuildAudioManager.of(guildId);
-        GuildAudioManager.getPlayerManager().loadItem(audioURL, new AudioLoadResultHandler() {
+        GuildAudioManager.getPlayerManager().loadItem(Stream.getStreamUrl(song), new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
                 manager.getPlayer().startTrack(track, false);
-                logger.info("Playing: {} - {}", song.artist(), song.title());
+                log.info("Playing: {} - {}", song.artist(), song.title());
             }
 
             @Override
@@ -150,7 +131,7 @@ public class Commands {
 
             @Override
             public void loadFailed(FriendlyException exception) {
-
+                log.error("Loading track failed: ", exception);
             }
         });
         return song;
@@ -158,34 +139,12 @@ public class Commands {
 
     private static boolean queryTooLong(MessageCtx ctx, String query) {
         if (query.length() > 1000) {
-            logger.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
+            log.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
                     query.length(), ctx.memberId().asLong(), ctx.guildId().asLong(), ctx.channelId().asLong());
             return true;
         }
 
         return false;
-    }
-
-    public static List<Song> search3(MessageCtx ctx, String query) throws IOException, InterruptedException {
-        ObjectMapper mapper = new ObjectMapper();
-        HttpResponse<String> response;
-
-        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
-        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
-        response = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            logger.warn("Subsonic search failed: {}", response.body());
-            return Collections.emptyList();
-        }
-
-        try {
-            logger.info("({}:{}) {}: No results found for search {}", ctx.guildId().asLong(), ctx.channelId().asLong(), ctx.memberId().asLong(), query);
-            return Arrays.asList(mapper.readValue(response.body(), Song[].class));
-        } catch (JsonProcessingException e) {
-            logger.error("Failed to parse JSON from Subsonic API", e);
-            return Collections.emptyList();
-        }
     }
 
     public static void register(String name, Command command) {
@@ -197,12 +156,12 @@ public class Commands {
     }
 
     public boolean isCommand(String content, MessageCreateEvent event) {
-        return content.startsWith(Commands.getActionStr(event.getGuildId()))
+        return content.startsWith(Commands.getPrefix(event.getGuildId()))
                 || event.getMessage().getUserMentionIds().contains(this.instance.getClient().getSelfId());
     }
 
     public String stripCommandPrefixOrMentions(String content, MessageCreateEvent event) {
-        String prefix = getActionStr(event.getGuildId());
+        String prefix = getPrefix(event.getGuildId());
         if (content.startsWith(prefix)) {
             return content.substring(prefix.length()).trim();
         }
@@ -218,16 +177,27 @@ public class Commands {
         return content; // fallback to original message
     }
 
+    /**
+     * Get the command Prefix for the specified (optional) guildId (e.g. !command would be "!")
+     * @param guildId optional guildId, as different guilds may have different prefixes
+     * @return the prefix to start commands with (e.g. "!")
+     */
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    public static String getActionStr(Optional<Snowflake> guildId) {
+    public static String getPrefix(Optional<Snowflake> guildId) {
         if (guildId.isPresent()) {
-            return guildActionStrs.getOrDefault(guildId.get(), DEFAULT_ACTION_STR);
+            return guildPrefixes.getOrDefault(guildId.get(), DEFAULT_PREFIX);
         }
-        return DEFAULT_ACTION_STR;
+        return DEFAULT_PREFIX;
     }
 
-    public static void setActionStr(Snowflake guildId, String actionStr) {
-        guildActionStrs.put(guildId, actionStr);
-        logger.info("Set {} action char to {}", guildId, actionStr);
+    /**
+     * Set the prefix for the guildId
+     * @param guildId the Snowflake of the Guild we're setting the prefix for
+     * @param actionStr the prefix String for the Guild
+     */
+    public static void setPrefix(Snowflake guildId, String actionStr) {
+        guildPrefixes.put(guildId, actionStr);
+        log.info("Set {} action char to {}", guildId, actionStr);
+        // TODO: In the future, persist to config file or database
     }
 }
