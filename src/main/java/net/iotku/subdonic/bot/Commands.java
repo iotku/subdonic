@@ -17,6 +17,7 @@ import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -30,11 +31,14 @@ public class Commands {
     private static final String DEFAULT_ACTION_STR = "!";
     private static final Map<Snowflake, String> guildActionStrs = new ConcurrentHashMap<>();
     private static final Logger logger = LoggerFactory.getLogger(Commands.class);
+    static HttpClient httpClient = HttpClient.newHttpClient();
     private static final Map<String, Command> COMMANDS = new HashMap<>();
     private final Bot instance;
+
     public Commands(Bot instance) {
         this.instance = instance;
     }
+
     private boolean messageIsAdmin(MessageCreateEvent event) { // TODO: There's probably a neater way to do this
         return event.getMessage().getAuthor().isPresent() && event.getMessage().getAuthor().get().getId().asLong() == instance.getOwnerId();
     }
@@ -67,72 +71,80 @@ public class Commands {
                     }
 
                     return Mono.fromCallable(() -> {
-                        ObjectMapper mapper = new ObjectMapper();
-                        HttpClient client = HttpClient.newHttpClient();
                         String query = String.join(" ", args);
+                        MessageCtx context = new MessageCtx(
+                                event.getGuildId().orElse(null),
+                                event.getMessage().getChannelId(),
+                                event.getMember().map(Member::getId).orElse(null)
+                        );
 
-                        String userId = event.getMember()
-                                .map(m -> m.getId().asString())
-                                .orElse("unknown-user");
+                        if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
-                        String guildId = event.getGuildId()
-                                .map(Snowflake::asString)
-                                .orElse("DM-or-unknown-guild");
-
-                        String channelId = event.getMessage()
-                                .getChannelId()
-                                .asString();
-                        if (query.length() > 1000) {
-                            logger.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
-                                    query.length(), userId, guildId, channelId);
-
-                            return Mono.empty();
-                        }
-
-                        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: Sanitation Concerns?
-                        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
-                        HttpResponse<String> response = client.send(req, HttpResponse.BodyHandlers.ofString());
-
-                        List<Song> songs;
-                        try {
-                            songs = Arrays.asList(mapper.readValue(response.body(), Song[].class));
-                        } catch (JsonProcessingException e) {
-                            throw new RuntimeException(e);
-                        }
-
-                        if (songs.isEmpty()) {
-                            logger.info("{}: No results found for search {}", guildId, query);
-                            return Mono.empty(); // no results
-                        }
-
-                        Song song = songs.getFirst();
-                        logger.info("Playing: {} - {}", song.artist(), song.title());
-                        GuildAudioManager manager = GuildAudioManager.of(event.getGuildId().get()); // TODO: Verify guildId is present
-                        String audioURL = "http://localhost:8080/api/v1/subsonic/stream/" + URLEncoder.encode(song.id(), StandardCharsets.UTF_8);
-                        GuildAudioManager.getPlayerManager().loadItem(audioURL, new AudioLoadResultHandler() {
-                            @Override
-                            public void trackLoaded(AudioTrack track) {
-                                manager.getPlayer().startTrack(track, false);
-                            }
-
-                            @Override
-                            public void playlistLoaded(AudioPlaylist playlist) {
-
-                            }
-
-                            @Override
-                            public void noMatches() {
-
-                            }
-
-                            @Override
-                            public void loadFailed(FriendlyException exception) {
-
-                            }
-                        });
-                        return song;
+                        List<Song> songs = search3(context, query);
+                        if (songs.isEmpty()) return Mono.empty(); // no results
+                        return loadTrack(songs.getFirst(), context.guildId());
                     }).then();
         }));
+    }
+
+    private static Song loadTrack(Song song, Snowflake guildId) {
+        String audioURL = "http://localhost:8080/api/v1/subsonic/stream/" + URLEncoder.encode(song.id(), StandardCharsets.UTF_8);
+        GuildAudioManager manager = GuildAudioManager.of(guildId);
+        GuildAudioManager.getPlayerManager().loadItem(audioURL, new AudioLoadResultHandler() {
+            @Override
+            public void trackLoaded(AudioTrack track) {
+                manager.getPlayer().startTrack(track, false);
+                logger.info("Playing: {} - {}", song.artist(), song.title());
+            }
+
+            @Override
+            public void playlistLoaded(AudioPlaylist playlist) {
+
+            }
+
+            @Override
+            public void noMatches() {
+
+            }
+
+            @Override
+            public void loadFailed(FriendlyException exception) {
+
+            }
+        });
+        return song;
+    }
+
+    private static boolean queryTooLong(MessageCtx ctx, String query) {
+        if (query.length() > 1000) {
+            logger.warn("Blocked oversized query ({} chars) from user {} in guild {} channel {}",
+                    query.length(), ctx.memberId(), ctx.guildId(), ctx.channelId());
+            return true;
+        }
+
+        return false;
+    }
+
+    public static List<Song> search3(MessageCtx ctx, String query) throws IOException, InterruptedException {
+        ObjectMapper mapper = new ObjectMapper();
+        HttpResponse<String> response;
+
+        String url = "http://localhost:8080/api/v1/subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8); // TODO: Sanitation Concerns?
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
+        response = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            logger.warn("Subsonic search failed: {}", response.body());
+            return Collections.emptyList();
+        }
+
+        try {
+            logger.info("({}:{}) {}: No results found for search {}", ctx.guildId(), ctx.channelId(), ctx.memberId(), query);
+            return Arrays.asList(mapper.readValue(response.body(), Song[].class));
+        } catch (JsonProcessingException e) {
+            logger.error("Failed to parse JSON from Subsonic API", e);
+            return Collections.emptyList();
+        }
     }
 
     public static void register(String name, Command command) {
