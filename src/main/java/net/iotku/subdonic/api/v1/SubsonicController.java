@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.List;
+import java.util.Objects;
 
 @RestController
 @SuppressWarnings("unused")
@@ -70,7 +71,7 @@ public class SubsonicController {
     @GetMapping("/search3")
     @ResponseBody
     public List<Child> search3(@RequestParam String query) {
-        return subsonic.searching().search3(query).getSongs();
+        return subsonic.searching().search3(query).getSongs().stream().filter(song -> !Objects.equals(song.getArtist(), "[Unknown Artist]")).toList();
     }
 
     /**
