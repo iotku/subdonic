@@ -2,6 +2,7 @@ package net.iotku.subdonic.api.v1;
 
 import net.beardbot.subsonic.client.Subsonic;
 import net.beardbot.subsonic.client.base.SubsonicIncompatibilityException;
+import net.iotku.subdonic.api.v1.filter.SubsonicFilter;
 import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +16,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.List;
-import java.util.Objects;
 
 @RestController
 @SuppressWarnings("unused")
@@ -59,7 +59,7 @@ public class SubsonicController {
     @GetMapping("/search2")
     @ResponseBody
     public List<Child> search2(@RequestParam String query) {
-        return subsonic.searching().search2(query).getSongs();
+        return subsonic.searching().search2(query).getSongs().stream().filter(SubsonicFilter.taglessChild).toList();
     }
 
     /**
@@ -71,10 +71,7 @@ public class SubsonicController {
     @GetMapping("/search3")
     @ResponseBody
     public List<Child> search3(@RequestParam String query) {
-        return subsonic.searching().search3(query).getSongs().stream()
-                .filter(song -> !Objects.equals(song.getArtist(), "[Unknown Artist]"))
-                .filter(song -> !song.getTitle().startsWith("/")) // Avoid sharing file paths for untagged tracks
-                .toList();
+        return subsonic.searching().search3(query).getSongs().stream().filter(SubsonicFilter.taglessChild).toList();
     }
 
     /**
