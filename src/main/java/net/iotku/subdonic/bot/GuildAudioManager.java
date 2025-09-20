@@ -17,7 +17,6 @@ import net.iotku.subdonic.api.v1.dto.Song;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
-import java.awt.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -101,15 +100,6 @@ public class GuildAudioManager {
                 .next()
                 .cast(MessageChannel.class);
     }
-
-//    public Mono<Void> announceTrack(Song track, Snowflake guildId) {
-//        GuildAudioManager manager = GuildAudioManager.of(guildId);
-//        return Mono.justOrEmpty(manager.getLastTextChannel())
-//                .flatMap(client::getChannelById)
-//                .cast(MessageChannel.class)
-//                .flatMap(ch -> ch.createMessage(nowPlayingEmbed(track)))
-//                .then();
-//    }
 
     public void setLastTextChannel(Snowflake lastTextChannel) {
         this.lastTextChannel = lastTextChannel;

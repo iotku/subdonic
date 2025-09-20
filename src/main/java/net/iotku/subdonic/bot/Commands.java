@@ -5,11 +5,19 @@ import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import discord4j.common.util.Snowflake;
+import discord4j.core.event.domain.interaction.ButtonInteractionEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.core.object.VoiceState;
+import discord4j.core.object.component.ActionRow;
+import discord4j.core.object.component.Button;
 import discord4j.core.object.entity.Member;
 import discord4j.core.object.entity.PartialMember;
+import discord4j.core.spec.EmbedCreateSpec;
+import discord4j.core.spec.MessageCreateSpec;
 import discord4j.voice.VoiceConnection;
+
+import java.util.stream.Collectors;
+
 
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.client.Search;
@@ -21,6 +29,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Commands {
     private static final String DEFAULT_PREFIX = "!";
@@ -113,6 +122,78 @@ public class Commands {
                                     ).orElse(Mono.empty())
                             );
         }));
+
+        register("search", (event, args) -> {
+            if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+
+            Snowflake guildId = event.getGuildId().get();
+            MessageCtx context = new MessageCtx(
+                    guildId,
+                    event.getMessage().getChannelId(),
+                    event.getMember().map(Member::getId).orElse(null)
+            );
+
+            String query = String.join(" ", args);
+            if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+
+            // Generate search results
+            List<Song> results = Search.search3(context, query);
+
+            // Limit to 5 Pages
+            List<List<Song>> pages = new ArrayList<>();
+            for (int i = 0; i < results.size(); i += 5) {
+                pages.add(results.subList(i, Math.min(i + 5, results.size())));
+            }
+
+            List<EmbedCreateSpec> embeds = new ArrayList<>();
+            for (int i = 0; i < pages.size(); i++) {
+                List<Song> page = pages.get(i);
+                embeds.add(EmbedCreateSpec.builder()
+                        .title("Search results for: " + query)
+                        .description(page.stream().map(s -> "- " + s.artist() + " - " + s.title() + " (" + s.album() + ")").collect(Collectors.joining("\n")))
+                        .footer("Page " + (i + 1) + " of " + pages.size(), null)
+                        .build());
+            }
+
+            AtomicInteger currentPage = new AtomicInteger(0);
+
+            // Send first page with buttons
+            return event.getMessage().getChannel()
+                    .flatMap(channel -> channel.createMessage(MessageCreateSpec.builder()
+                            .addEmbed(embeds.getFirst())
+                            .addComponent(ActionRow.of(
+                                    Button.secondary("search_prev", "Prev").disabled(true),
+                                    Button.secondary("search_next", "Next").disabled(embeds.size() <= 1)
+                            ))
+                            .build()))
+                    .flatMap(message ->
+                            message.getClient().on(ButtonInteractionEvent.class)
+                                    .filter(e -> e.getMessageId().equals(message.getId()))
+                                    .filter(e -> event.getMessage().getAuthor()
+                                            .map(user -> user.getId().equals(e.getUser().getId()))
+                                            .orElse(false))
+                                    .flatMap(e -> {
+                                        int page = currentPage.get();
+                                        if (e.getCustomId().equals("search_prev") && page > 0) {
+                                            page--;
+                                            currentPage.set(page);
+                                        } else if (e.getCustomId().equals("search_next") && page < embeds.size() - 1) {
+                                            page++;
+                                            currentPage.set(page);
+                                        } else {
+                                            return e.reply().withEphemeral(true).withContent("No more pages.");
+                                        }
+
+                                        Button prevButton = Button.secondary("search_prev", "Prev").disabled(page == 0);
+                                        Button nextButton = Button.secondary("search_next", "Next").disabled(page == embeds.size() - 1);
+
+                                        return e.edit()
+                                                .withEmbeds(embeds.get(page))
+                                                .withComponents(ActionRow.of(prevButton, nextButton));
+                                    })
+                                    .then()
+                    );
+        });
     }
 
     private static Song loadTrack(Song song, Snowflake guildId) {

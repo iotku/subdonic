@@ -47,7 +47,7 @@ public class Search {
                         score += 10; // big weight for title match
                     }
                     if (song.album() != null && song.album().toLowerCase().contains(query.toLowerCase())) {
-                        score -= 1; // We probably aren't looking for an album so punish this
+                        score += 2; // We probably aren't looking for an album so punish this
                     }
                     if (song.artist() != null && song.artist().toLowerCase().contains(query.toLowerCase())) {
                         score += 5;
