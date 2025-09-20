@@ -139,6 +139,19 @@ public class Commands {
             // Generate search results
             List<Song> results = Search.search3(context, query);
 
+            if (results.isEmpty()) {
+                EmbedCreateSpec noResults = EmbedCreateSpec.builder()
+                        .title("Search results for: " + query)
+                        .description("No results found.")
+                        .build();
+
+                return event.getMessage().getChannel()
+                        .flatMap(ch -> ch.createMessage(MessageCreateSpec.builder()
+                                .addEmbed(noResults)
+                                .build()))
+                        .then();
+            }
+
             // Limit to 5 Pages
             List<List<Song>> pages = new ArrayList<>();
             for (int i = 0; i < results.size(); i += 5) {
