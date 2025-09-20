@@ -71,7 +71,10 @@ public class SubsonicController {
     @GetMapping("/search3")
     @ResponseBody
     public List<Child> search3(@RequestParam String query) {
-        return subsonic.searching().search3(query).getSongs().stream().filter(song -> !Objects.equals(song.getArtist(), "[Unknown Artist]")).toList();
+        return subsonic.searching().search3(query).getSongs().stream()
+                .filter(song -> !Objects.equals(song.getArtist(), "[Unknown Artist]"))
+                .filter(song -> !song.getTitle().startsWith("/")) // Avoid sharing file paths for untagged tracks
+                .toList();
     }
 
     /**
