@@ -59,6 +59,7 @@ public class SubsonicController {
     @GetMapping("/search2")
     @ResponseBody
     public List<Child> search2(@RequestParam String query) {
+        query = query.replace('-', ' '); // Make "artist - title" queries more reliable
         return subsonic.searching().search2(query).getSongs().stream().filter(SubsonicFilter.taglessChild).toList();
     }
 
@@ -71,6 +72,7 @@ public class SubsonicController {
     @GetMapping("/search3")
     @ResponseBody
     public List<Child> search3(@RequestParam String query) {
+        query = query.replace('-', ' '); // Make "artist - title" queries more reliable
         return subsonic.searching().search3(query).getSongs().stream().filter(SubsonicFilter.taglessChild).toList();
     }
 
