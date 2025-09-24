@@ -7,17 +7,17 @@ on:
       - main
 
 jobs:
-  publish:
+  javadoc:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # if you have a protection rule on your repository, you'll need to give write permission to the workflow.
     steps:
-      - name: Deploy JavaDoc 🚀
-        uses: MathieuSoysal/Javadoc-publisher.yml@v3.0.2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          javadoc-branch: javadoc
+          distribution: temurin
           java-version: 21
-          target-folder: javadoc # url will be https://<username>.github.io/<repo>/javadoc, This can be left as nothing to generate javadocs in the root folder.
-          project: gradle # or gradle
-          # subdirectories: moduleA moduleB #for subdirectories support, needs to be run with custom command
+      - run: ./gradlew javadoc
+      - run: mkdir -p docs/javadoc && cp -r build/docs/javadoc/* docs/javadoc/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javadoc
+          path: docs/javadoc
