@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html"},{"l":"net.iotku.subdonic"},{"l":"net.iotku.subdonic.api.v1"},{"l":"net.iotku.subdonic.api.v1.dto"},{"l":"net.iotku.subdonic.api.v1.filter"},{"l":"net.iotku.subdonic.bot"},{"l":"net.iotku.subdonic.client"},{"l":"net.iotku.subdonic.subsonic"}];updateSearchResults();
