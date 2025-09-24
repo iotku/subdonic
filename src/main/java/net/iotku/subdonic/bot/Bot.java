@@ -1,12 +1,14 @@
 package net.iotku.subdonic.bot;
 
 import discord4j.common.util.Snowflake;
-import discord4j.core.DiscordClientBuilder;
+import discord4j.core.DiscordClient;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.discordjson.json.ApplicationInfoData;
 import discord4j.discordjson.possible.Possible;
+import discord4j.gateway.intent.Intent;
+import discord4j.gateway.intent.IntentSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,7 +33,11 @@ public class Bot {
 
     public Bot(@Value("${discord.token}") String token) {
         // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
-        client = DiscordClientBuilder.create(token).build().login().block();
+        client = DiscordClient.create(token)
+                .gateway()
+                .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
+                .login()
+                .block();
         assert client != null;
         handleEvents();
         this.commands = new Commands(this);
