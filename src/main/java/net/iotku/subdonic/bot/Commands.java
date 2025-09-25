@@ -128,7 +128,7 @@ public class Commands {
                     // Set lastTextChannel so we know where to put now playing messages
                     GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
 
-                    return Mono.fromCallable(() -> Search.random(context, 1)).subscribeOn(Schedulers.boundedElastic())
+                    return Mono.fromCallable(() -> Search.random(context, 5)).subscribeOn(Schedulers.boundedElastic())
                             .flatMap(songs -> songs.stream().findFirst()
                                     .map(firstSong ->
                                             Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))

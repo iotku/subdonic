@@ -59,9 +59,19 @@ public class Search {
                 .toList();
     }
 
-    public static List<Song> random(MessageCtx ctx, int count) throws IOException, InterruptedException {
+    /**
+     * Get random songs from the Subsonic API
+     * @param ctx MessageCtx to track usage
+     * @param size how many random tracks to request from the API
+     * @return a List of Songs returned from the API
+     * @throws IOException           if an I/O error occurs while sending the request
+     *                               or reading the response from the Subsonic API
+     * @throws InterruptedException  if the calling thread is interrupted while waiting
+     *                               for the HTTP request to complete
+     */
+    public static List<Song> random(MessageCtx ctx, int size) throws IOException, InterruptedException {
         ObjectMapper mapper = new ObjectMapper();
-        String url = baseUrl + "subsonic/getRandomSongs?count=" + URLEncoder.encode(Integer.toString(count), StandardCharsets.UTF_8);
+        String url = baseUrl + "subsonic/getRandomSongs?size=" + URLEncoder.encode(Integer.toString(size), StandardCharsets.UTF_8);
         HttpResponse<String> response = Http.makeRequest(url);
 
         if (response.statusCode() != 200) {
@@ -72,7 +82,7 @@ public class Search {
         List<Song> results;
         try {
             results = Arrays.asList(mapper.readValue(response.body(), Song[].class));
-            log.info("{} | {} random songs found. Requested {}", ctx, results.size(), count);
+            log.info("{} | {} random songs found. Requested {}", ctx, results.size(), size);
         } catch (JsonProcessingException e) {
             log.error("Failed to parse JSON from Subsonic API", e);
             return Collections.emptyList();
