@@ -58,4 +58,26 @@ public class Search {
                 .map(RankedSong::song)
                 .toList();
     }
+
+    public static List<Song> random(MessageCtx ctx, int count) throws IOException, InterruptedException {
+        ObjectMapper mapper = new ObjectMapper();
+        String url = baseUrl + "subsonic/getRandomSongs?count=" + URLEncoder.encode(Integer.toString(count), StandardCharsets.UTF_8);
+        HttpResponse<String> response = Http.makeRequest(url);
+
+        if (response.statusCode() != 200) {
+            log.warn("Subsonic random failed: {}", response.body());
+            return Collections.emptyList();
+        }
+
+        List<Song> results;
+        try {
+            results = Arrays.asList(mapper.readValue(response.body(), Song[].class));
+            log.info("{} | {} random songs found. Requested {}", ctx, results.size(), count);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse JSON from Subsonic API", e);
+            return Collections.emptyList();
+        }
+        return results;
+    }
+
 }

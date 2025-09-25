@@ -77,23 +77,7 @@ public class Commands {
                     .then();
         });
 
-        register("play", (event, args) -> Mono.justOrEmpty(event.getMember())
-                .flatMap(Member::getVoiceState)
-                .flatMap(VoiceState::getChannel)
-                .flatMap(userChannel -> Mono.justOrEmpty(event.getGuildId())
-                        .flatMap(guildId -> event.getClient().getSelfMember(guildId)
-                                .flatMap(PartialMember::getVoiceState)
-                                .flatMap(VoiceState::getChannel)
-                                .flatMap(botChannel -> {
-                                    if (botChannel.getId().equals(userChannel.getId())) { // bot in same channel
-                                        return Mono.just(true);
-                                    }
-                                    return Mono.just(false); // bot in a different channel
-                                })
-                                // bot not in any channel, Join User's channel
-                                .switchIfEmpty(GuildAudioManager.of(guildId).joinAndTrack(userChannel).thenReturn(true))
-                        )
-                )
+        register("play", (event, args) -> ensureSameChannelOrJoin(event)
                 .flatMap(sameChannel -> {
                     if (!sameChannel) {
                         return event.getMessage().getChannel()
@@ -122,6 +106,37 @@ public class Commands {
                                     ).orElse(Mono.empty())
                             );
         }));
+
+        register("rand", (event, args) -> ensureSameChannelOrJoin(event)
+                .flatMap(sameChannel -> {
+                    if (!sameChannel) {
+                        return event.getMessage().getChannel()
+                                .flatMap(ch ->
+                                        ch.createMessage("Must be in same voice channel to play music!")).then();
+                    }
+
+                    if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+                    MessageCtx context = new MessageCtx(
+                            event.getGuildId().get(), // we verified it exists above
+                            event.getMessage().getChannelId(),
+                            event.getMember().map(Member::getId).orElse(null)
+                    );
+
+                    String query = String.join(" ", args);
+                    if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+
+                    // Set lastTextChannel so we know where to put now playing messages
+                    GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
+
+                    return Mono.fromCallable(() -> Search.random(context, 1)).subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(songs -> songs.stream().findFirst()
+                                    .map(firstSong ->
+                                            Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
+                                                    .subscribeOn(Schedulers.boundedElastic()).then()
+                                    ).orElse(Mono.empty())
+                            );
+                }));
+
 
         register("search", (event, args) -> {
             if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
@@ -209,6 +224,26 @@ public class Commands {
         });
     }
 
+
+    private static Mono<Boolean> ensureSameChannelOrJoin(MessageCreateEvent event) {
+        return Mono.justOrEmpty(event.getMember())
+                .flatMap(Member::getVoiceState)
+                .flatMap(VoiceState::getChannel)
+                .flatMap(userChannel -> Mono.justOrEmpty(event.getGuildId())
+                        .flatMap(guildId -> event.getClient().getSelfMember(guildId)
+                                .flatMap(PartialMember::getVoiceState)
+                                .flatMap(VoiceState::getChannel)
+                                .flatMap(botChannel -> {
+                                    if (botChannel.getId().equals(userChannel.getId())) { // bot in same channel
+                                        return Mono.just(true);
+                                    }
+                                    return Mono.just(false); // bot in a different channel
+                                })
+                                // bot not in any channel, Join User's channel
+                                .switchIfEmpty(GuildAudioManager.of(guildId).joinAndTrack(userChannel).thenReturn(true))
+                        )
+                );
+    }
     private static Song loadTrack(Song song, Snowflake guildId) {
         GuildAudioManager manager = GuildAudioManager.of(guildId);
         GuildAudioManager.getPlayerManager().loadItem(Stream.getStreamUrl(song), new AudioLoadResultHandler() {
