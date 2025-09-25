@@ -1,7 +1,10 @@
 package net.iotku.subdonic.api.v1;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import net.beardbot.subsonic.client.Subsonic;
 import net.beardbot.subsonic.client.base.SubsonicIncompatibilityException;
+import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.api.v1.filter.SubsonicFilter;
 import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
@@ -14,8 +17,14 @@ import org.subsonic.restapi.Child;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @SuppressWarnings("unused")
@@ -85,11 +94,41 @@ public class SubsonicController {
     @GetMapping("/stream/{id}")
     public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) throws IOException {
         URL url = subsonic.media().stream(id).getUrl();
-        // ! NOTE: spaces in the URL will DOOM YOU !
+        // ! NOTE: spaces in the URL (e.g. from the client name) will DOOM YOU !
         String safeUrl = url.toString().replace(" ", "%20");
         InputStream inputStream = new URL(safeUrl).openStream(); // TODO: use HttpClient / HttpRequest instead
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(new InputStreamResource(inputStream));
+    }
+
+
+    @GetMapping("/getRandomSongs")
+    public List<Song> getRandomSongs(@RequestParam(defaultValue = "10") int size) throws Exception {
+        String urlStr = subsonic.createUrl(
+                        "getRandomSongs.view",
+                        Map.of("size", List.of(String.valueOf(size)))
+                ).toString()
+                .replace(" ", "%20")
+                .replace("&f=xml", "&f=json"); // NOTE: createUrl enforces &f=xml, so we rewrite this
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(urlStr))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode root = mapper.readTree(response.body());
+
+        JsonNode songsNode = root
+                .path("subsonic-response")
+                .path("randomSongs")
+                .path("song");
+
+        Song[] songs = mapper.treeToValue(songsNode, Song[].class);
+        return Arrays.stream(songs).toList();
     }
 }
