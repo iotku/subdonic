@@ -51,10 +51,10 @@ public class Bot {
         client.getEventDispatcher().on(MessageCreateEvent.class)
                 .flatMap(event -> {
                     String content = event.getMessage().getContent();
-                    if (!commands.isCommand(content, event)) return Mono.empty(); // exit early
+                    if (!commands.isCommand(event)) return Mono.empty(); // exit early
 
                     // args[0] is the command
-                    String[] args = commands.stripCommandPrefixOrMentions(content, event).trim().split("\\s+");
+                    String[] args = commands.stripCommandPrefixOrMentions(event).trim().split("\\s+");
                     if (args.length == 0) return Mono.empty();
 
                     String[] cmdArgs = Arrays.copyOfRange(args, 1, args.length);

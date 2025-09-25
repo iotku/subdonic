@@ -224,7 +224,6 @@ public class Commands {
         });
     }
 
-
     private static Mono<Boolean> ensureSameChannelOrJoin(MessageCreateEvent event) {
         return Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
@@ -244,6 +243,7 @@ public class Commands {
                         )
                 );
     }
+
     private static Song loadTrack(Song song, Snowflake guildId) {
         GuildAudioManager manager = GuildAudioManager.of(guildId);
         GuildAudioManager.getPlayerManager().loadItem(Stream.getStreamUrl(song), new AudioLoadResultHandler() {
@@ -290,13 +290,19 @@ public class Commands {
         return COMMANDS.get(command);
     }
 
-    public boolean isCommand(String content, MessageCreateEvent event) {
-        return content.startsWith(Commands.getPrefix(event.getGuildId()))
+    public boolean isCommand(MessageCreateEvent event) {
+        return event.getMessage().getContent().startsWith(Commands.getPrefix(event.getGuildId()))
                 || event.getMessage().getUserMentionIds().contains(Bot.getClient().getSelfId());
     }
 
-    public String stripCommandPrefixOrMentions(String content, MessageCreateEvent event) {
+    /**
+     * Remove command prefix or bot mentions from the provided message
+     * @param event MessageCreateEvent with message to strip out prefix/mentions
+     * @return a String of the message after striping out the prefix/mentions
+     */
+    public String stripCommandPrefixOrMentions(MessageCreateEvent event) {
         String prefix = getPrefix(event.getGuildId());
+        String content = event.getMessage().getContent();
         if (content.startsWith(prefix)) {
             return content.substring(prefix.length()).trim();
         }

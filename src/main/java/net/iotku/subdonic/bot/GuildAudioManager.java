@@ -60,6 +60,11 @@ public class GuildAudioManager {
         player.addListener(scheduler);
     }
 
+    /**
+     * Send a nowPlaying enbed to the most preferred text channel
+     * @param track a Song with the metadata to be sent in the embed message
+     * @return a EmbedCreateSpec, we mostly just care about the side effect of sending the message
+     */
     public EmbedCreateSpec sendNowPlayingEmbed(Song track) {
         String query = track.title() + " " + track.artist();
         String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
@@ -86,8 +91,12 @@ public class GuildAudioManager {
         return embed;
     }
 
+    /**
+     * Return the channel the message should most likely be sent to for good UX.
+     * Send to preferredTextChannel -> lastTextChannel -> first TextChannel in Guild
+     * @return a {@code Mono} that completes with the preferred MessageChannel
+     */
     public Mono<MessageChannel> getPreferredTextChannel() {
-        // preferredTextChannel -> lastTextChannel -> first TextChannel in Guild
         Snowflake fallbackId = preferredTextChannel != null ? preferredTextChannel : lastTextChannel;
         if (fallbackId != null) {
             return Bot.getClient().getChannelById(fallbackId).ofType(MessageChannel.class);
@@ -101,10 +110,20 @@ public class GuildAudioManager {
                 .cast(MessageChannel.class);
     }
 
+    /**
+     * Track the last channel that a text message was sent to.
+     * @param lastTextChannel the last place the bot received a textMessage
+     */
     public void setLastTextChannel(Snowflake lastTextChannel) {
         this.lastTextChannel = lastTextChannel;
     }
 
+    /**
+     * Join a VoiceChannel and keep track of membership, e.g. disconnect when empty.
+     * @param channel a VoiceChannel to join and keep track membership
+     * @return a {@code Mono} that completes with the active {@link VoiceConnection}
+     *         once the bot has joined
+     */
     public Mono<VoiceConnection> joinAndTrack(VoiceChannel channel) {
         return channel.join(
                         VoiceChannelJoinSpec.builder()
