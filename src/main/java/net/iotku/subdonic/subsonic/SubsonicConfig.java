@@ -2,8 +2,6 @@ package net.iotku.subdonic.subsonic;
 
 import net.beardbot.subsonic.client.Subsonic;
 import net.beardbot.subsonic.client.SubsonicPreferences;
-//import org.springframework.beans.factory.annotation.Value;
-//import org.springframework.context.annotation.Bean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,7 +23,7 @@ public class SubsonicConfig {
         SubsonicPreferences preferences = new SubsonicPreferences(serverURL, user, pass);
 //        preferences.setStreamBitRate(320); // I believe flac Ignores this.
         preferences.setStreamFormat("flac");
-        preferences.setClientName("Subdonic Discord Bot");
+        preferences.setClientName("Subdonic%20Discord%20Bot"); // NOTE: Spaces will DOOM YOU, ask me how I know...
         return new Subsonic(preferences);
     }
 
