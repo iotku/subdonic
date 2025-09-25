@@ -67,9 +67,17 @@ public class SubsonicController {
      */
     @GetMapping("/search2")
     @ResponseBody
-    public List<Child> search2(@RequestParam String query) {
+    public List<Song> search2(@RequestParam String query) {
         query = query.replace('-', ' '); // Make "artist - title" queries more reliable
-        return subsonic.searching().search2(query).getSongs().stream().filter(SubsonicFilter.taglessChild).toList();
+        return subsonic.searching().search2(query).getSongs().stream()
+                .map(child -> new Song(
+                        child.getTitle(),
+                        child.getArtist(),
+                        child.getAlbum(),
+                        child.getYear() != null ? child.getYear().toString() : null,
+                        child.getId()
+                ))
+                .filter(SubsonicFilter.taglessSong).toList();
     }
 
     /**
@@ -80,9 +88,17 @@ public class SubsonicController {
      */
     @GetMapping("/search3")
     @ResponseBody
-    public List<Child> search3(@RequestParam String query) {
+    public List<Song> search3(@RequestParam String query) {
         query = query.replace('-', ' '); // Make "artist - title" queries more reliable
-        return subsonic.searching().search3(query).getSongs().stream().filter(SubsonicFilter.taglessChild).toList();
+        return subsonic.searching().search3(query).getSongs().stream()
+                .map(child -> new Song(
+                        child.getTitle(),
+                        child.getArtist(),
+                        child.getAlbum(),
+                        child.getYear() != null ? child.getYear().toString() : null,
+                        child.getId()
+                ))
+                .filter(SubsonicFilter.taglessSong).toList();
     }
 
     /**
@@ -129,6 +145,7 @@ public class SubsonicController {
                 .path("song");
 
         Song[] songs = mapper.treeToValue(songsNode, Song[].class);
-        return Arrays.stream(songs).toList();
+        // NOTE: Fairly unlikely to only have invalid songs, but maybe consider requesting multiple songs to be sure.
+        return Arrays.stream(songs).filter(SubsonicFilter.taglessSong).toList();
     }
 }
