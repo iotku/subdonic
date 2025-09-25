@@ -102,9 +102,13 @@ public class Commands {
                             .flatMap(songs -> songs.stream().findFirst()
                                     .map(firstSong ->
                                             Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
-                                                    .subscribeOn(Schedulers.boundedElastic()).then()
-                                    ).orElse(Mono.empty())
-                            );
+                                                    .subscribeOn(Schedulers.boundedElastic())
+                                                    .then()
+                                    )
+                                    .orElseGet(() -> event.getMessage().getChannel()
+                                            .flatMap(ch -> ch.createMessage("No tracks found for " + query)
+                                                    .then()))
+                                );
         }));
 
         register("rand", (event, args) -> ensureSameChannelOrJoin(event)
