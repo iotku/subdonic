@@ -10,15 +10,15 @@ import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.subsonic.restapi.Child;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -108,14 +108,38 @@ public class SubsonicController {
      * @throws IOException if an error occurs deploying the ResponseEntity
      */
     @GetMapping("/stream/{id}")
-    public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) throws IOException {
-        URL url = subsonic.media().stream(id).getUrl();
-        // ! NOTE: spaces in the URL (e.g. from the client name) will DOOM YOU !
-        String safeUrl = url.toString().replace(" ", "%20");
-        InputStream inputStream = new URL(safeUrl).openStream(); // TODO: use HttpClient / HttpRequest instead
+    public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) throws IOException, InterruptedException {
+        // ! NOTE: spaces in the URL (e.g. from the subsonic client name) will DOOM YOU !
+        String safeUrl = subsonic.media().stream(id).getUrl()
+                .toString()
+                .replace(" ", "%20");
+
+        HttpClient client = HttpClient.newHttpClient(); // TODO: Do we want to maintain a HttpClient?
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(safeUrl))
+                .GET()
+                .build();
+
+        HttpResponse<InputStream> response;
+        try {
+            response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (IOException | InterruptedException e) {
+            log.error("Failed to fetch stream for id {}", id, e);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Could not fetch stream for id " + id, e);
+        }
+
+        if (response.statusCode() != 200) {
+            log.error("Subsonic returned status {} for id {}", response.statusCode(), id);
+            throw new ResponseStatusException(
+                    HttpStatus.valueOf(response.statusCode()),
+                    "Subsonic returned status " + response.statusCode() + " for id " + id
+            );
+        }
+
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new InputStreamResource(inputStream));
+                .body(new InputStreamResource(response.body()));
     }
 
 
