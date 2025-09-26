@@ -16,6 +16,7 @@ import discord4j.core.spec.EmbedCreateSpec;
 import discord4j.core.spec.MessageCreateSpec;
 import discord4j.voice.VoiceConnection;
 
+import java.io.IOException;
 import java.util.stream.Collectors;
 
 
@@ -54,7 +55,15 @@ public class Commands {
     static {
         register("ping", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
         register("pong", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
-        register("join", (event, args) -> Mono.justOrEmpty(event.getMember())
+        register("join", Commands::join);
+        register("disconnect", Commands::disconnect);
+        register("play", Commands::play);
+        register("rand", Commands::random);
+        register("search", Commands::search);
+    }
+
+    private static Mono<Void> join(MessageCreateEvent event, String[] args) {
+        return Mono.justOrEmpty(event.getMember())
                 .flatMap(Member::getVoiceState)
                 .flatMap(VoiceState::getChannel)
                 .flatMap(channel -> {
@@ -62,92 +71,33 @@ public class Commands {
                     // Set lastTextChannel so we know where to put now playing messages
                     manager.setLastTextChannel(event.getMessage().getChannelId());
                     return manager.joinAndTrack(channel).then();
-                }));
+                });
+    }
 
-        register("disconnect", (event, args) -> {
-            Snowflake guildId = event.getGuildId().orElse(null);
-            if (guildId == null) return Mono.empty(); // DMs
+    private static Mono<Void> disconnect(MessageCreateEvent event, String[] args) {
+        Snowflake guildId = event.getGuildId().orElse(null);
+        if (guildId == null) return Mono.empty(); // DMs
 
-            GuildAudioManager manager = GuildAudioManager.of(guildId);
-            return Mono.justOrEmpty(manager.getConnection())
-                    .flatMap(VoiceConnection::disconnect)
-                    .then(event.getMessage()
-                            .getChannel()
-                            .flatMap(ch -> ch.createMessage("Disconnected from voice channel.")))
-                    .then();
-        });
+        GuildAudioManager manager = GuildAudioManager.of(guildId);
+        return Mono.justOrEmpty(manager.getConnection())
+                .flatMap(VoiceConnection::disconnect)
+                .then(event.getMessage()
+                        .getChannel()
+                        .flatMap(ch -> ch.createMessage("Disconnected from voice channel.")))
+                .then();
+    }
 
-        register("play", (event, args) -> ensureSameChannelOrJoin(event)
-                .flatMap(sameChannel -> {
-                    if (!sameChannel) {
-                        return event.getMessage().getChannel()
-                                .flatMap(ch ->
-                                        ch.createMessage("Must be in same voice channel to play music!")).then();
-                    }
+    private static Mono<Void> play (MessageCreateEvent event, String[] args) {
+        return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
+            if (!sameChannel) {
+                return event.getMessage().getChannel()
+                        .flatMap(ch ->
+                                ch.createMessage("Must be in same voice channel to play music!")).then();
+            }
 
-                    if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
-                    MessageCtx context = new MessageCtx(
-                            event.getGuildId().get(), // we verified it exists above
-                            event.getMessage().getChannelId(),
-                            event.getMember().map(Member::getId).orElse(null)
-                    );
-
-                    String query = String.join(" ", args);
-                    if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
-
-                    // Set lastTextChannel so we know where to put now playing messages
-                    GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
-
-                    return Mono.fromCallable(() -> Search.search3(context, query)).subscribeOn(Schedulers.boundedElastic())
-                            .flatMap(songs -> songs.stream().findFirst()
-                                    .map(firstSong ->
-                                            Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
-                                                    .subscribeOn(Schedulers.boundedElastic())
-                                                    .then()
-                                    )
-                                    .orElseGet(() -> event.getMessage().getChannel()
-                                            .flatMap(ch -> ch.createMessage("No tracks found for " + query)
-                                                    .then()))
-                                );
-        }));
-
-        register("rand", (event, args) -> ensureSameChannelOrJoin(event)
-                .flatMap(sameChannel -> {
-                    if (!sameChannel) {
-                        return event.getMessage().getChannel()
-                                .flatMap(ch ->
-                                        ch.createMessage("Must be in same voice channel to play music!")).then();
-                    }
-
-                    if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
-                    MessageCtx context = new MessageCtx(
-                            event.getGuildId().get(), // we verified it exists above
-                            event.getMessage().getChannelId(),
-                            event.getMember().map(Member::getId).orElse(null)
-                    );
-
-                    String query = String.join(" ", args);
-                    if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
-
-                    // Set lastTextChannel so we know where to put now playing messages
-                    GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
-
-                    return Mono.fromCallable(() -> Search.random(context, 5)).subscribeOn(Schedulers.boundedElastic())
-                            .flatMap(songs -> songs.stream().findFirst()
-                                    .map(firstSong ->
-                                            Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
-                                                    .subscribeOn(Schedulers.boundedElastic()).then()
-                                    ).orElse(Mono.empty())
-                            );
-                }));
-
-
-        register("search", (event, args) -> {
             if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
-
-            Snowflake guildId = event.getGuildId().get();
             MessageCtx context = new MessageCtx(
-                    guildId,
+                    event.getGuildId().get(), // we verified it exists above
                     event.getMessage().getChannelId(),
                     event.getMember().map(Member::getId).orElse(null)
             );
@@ -155,77 +105,136 @@ public class Commands {
             String query = String.join(" ", args);
             if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
-            // Generate search results
-            List<Song> results = Search.search3(context, query);
+            // Set lastTextChannel so we know where to put now playing messages
+            GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
 
-            if (results.isEmpty()) {
-                EmbedCreateSpec noResults = EmbedCreateSpec.builder()
-                        .title("Search results for: " + query)
-                        .description("No results found.")
-                        .build();
-
-                return event.getMessage().getChannel()
-                        .flatMap(ch -> ch.createMessage(MessageCreateSpec.builder()
-                                .addEmbed(noResults)
-                                .build()))
-                        .then();
-            }
-
-            // Limit to 5 Pages
-            List<List<Song>> pages = new ArrayList<>();
-            for (int i = 0; i < results.size(); i += 5) {
-                pages.add(results.subList(i, Math.min(i + 5, results.size())));
-            }
-
-            List<EmbedCreateSpec> embeds = new ArrayList<>();
-            for (int i = 0; i < pages.size(); i++) {
-                List<Song> page = pages.get(i);
-                embeds.add(EmbedCreateSpec.builder()
-                        .title("Search results for: " + query)
-                        .description(page.stream().map(s -> "- " + s.artist() + " - " + s.title() + " (" + s.album() + ")").collect(Collectors.joining("\n")))
-                        .footer("Page " + (i + 1) + " of " + pages.size(), null)
-                        .build());
-            }
-
-            AtomicInteger currentPage = new AtomicInteger(0);
-
-            // Send first page with buttons
-            return event.getMessage().getChannel()
-                    .flatMap(channel -> channel.createMessage(MessageCreateSpec.builder()
-                            .addEmbed(embeds.getFirst())
-                            .addComponent(ActionRow.of(
-                                    Button.secondary("search_prev", "Prev").disabled(true),
-                                    Button.secondary("search_next", "Next").disabled(embeds.size() <= 1)
-                            ))
-                            .build()))
-                    .flatMap(message ->
-                            message.getClient().on(ButtonInteractionEvent.class)
-                                    .filter(e -> e.getMessageId().equals(message.getId()))
-                                    .filter(e -> event.getMessage().getAuthor()
-                                            .map(user -> user.getId().equals(e.getUser().getId()))
-                                            .orElse(false))
-                                    .flatMap(e -> {
-                                        int page = currentPage.get();
-                                        if (e.getCustomId().equals("search_prev") && page > 0) {
-                                            page--;
-                                            currentPage.set(page);
-                                        } else if (e.getCustomId().equals("search_next") && page < embeds.size() - 1) {
-                                            page++;
-                                            currentPage.set(page);
-                                        } else {
-                                            return e.reply().withEphemeral(true).withContent("No more pages.");
-                                        }
-
-                                        Button prevButton = Button.secondary("search_prev", "Prev").disabled(page == 0);
-                                        Button nextButton = Button.secondary("search_next", "Next").disabled(page == embeds.size() - 1);
-
-                                        return e.edit()
-                                                .withEmbeds(embeds.get(page))
-                                                .withComponents(ActionRow.of(prevButton, nextButton));
-                                    })
-                                    .then()
+            return Mono.fromCallable(() -> Search.search3(context, query)).subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(songs -> songs.stream().findFirst()
+                            .map(firstSong ->
+                                    Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
+                                            .subscribeOn(Schedulers.boundedElastic())
+                                            .then()
+                            )
+                            .orElseGet(() -> event.getMessage().getChannel()
+                                    .flatMap(ch -> ch.createMessage("No tracks found for " + query)
+                                            .then()))
                     );
         });
+    }
+    private static Mono<Void> random (MessageCreateEvent event, String[] args) {
+        return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
+            if (!sameChannel) {
+                return event.getMessage().getChannel()
+                        .flatMap(ch ->
+                                ch.createMessage("Must be in same voice channel to play music!")).then();
+            }
+
+            if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+            MessageCtx context = new MessageCtx(
+                    event.getGuildId().get(), // we verified it exists above
+                    event.getMessage().getChannelId(),
+                    event.getMember().map(Member::getId).orElse(null)
+            );
+
+            String query = String.join(" ", args);
+            if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+
+            // Set lastTextChannel so we know where to put now playing messages
+            GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
+
+            return Mono.fromCallable(() -> Search.random(context, 5)).subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(songs -> songs.stream().findFirst()
+                            .map(firstSong ->
+                                    Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
+                                            .subscribeOn(Schedulers.boundedElastic()).then()
+                            ).orElse(Mono.empty())
+                    );
+        });
+    }
+
+    private static Mono<Void> search (MessageCreateEvent event, String[] args) throws IOException, InterruptedException {
+        if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+
+        Snowflake guildId = event.getGuildId().get();
+        MessageCtx context = new MessageCtx(
+                guildId,
+                event.getMessage().getChannelId(),
+                event.getMember().map(Member::getId).orElse(null)
+        );
+
+        String query = String.join(" ", args);
+        if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+
+        // Generate search results
+        List<Song> results = Search.search3(context, query);
+
+        if (results.isEmpty()) {
+            EmbedCreateSpec noResults = EmbedCreateSpec.builder()
+                    .title("Search results for: " + query)
+                    .description("No results found.")
+                    .build();
+
+            return event.getMessage().getChannel()
+                    .flatMap(ch -> ch.createMessage(MessageCreateSpec.builder()
+                            .addEmbed(noResults)
+                            .build()))
+                    .then();
+        }
+
+        // Limit to 5 Pages
+        List<List<Song>> pages = new ArrayList<>();
+        for (int i = 0; i < results.size(); i += 5) {
+            pages.add(results.subList(i, Math.min(i + 5, results.size())));
+        }
+
+        List<EmbedCreateSpec> embeds = new ArrayList<>();
+        for (int i = 0; i < pages.size(); i++) {
+            List<Song> page = pages.get(i);
+            embeds.add(EmbedCreateSpec.builder()
+                    .title("Search results for: " + query)
+                    .description(page.stream().map(s -> "- " + s.artist() + " - " + s.title() + " (" + s.album() + ")").collect(Collectors.joining("\n")))
+                    .footer("Page " + (i + 1) + " of " + pages.size(), null)
+                    .build());
+        }
+
+        AtomicInteger currentPage = new AtomicInteger(0);
+
+        // Send first page with buttons
+        return event.getMessage().getChannel()
+                .flatMap(channel -> channel.createMessage(MessageCreateSpec.builder()
+                        .addEmbed(embeds.getFirst())
+                        .addComponent(ActionRow.of(
+                                Button.secondary("search_prev", "Prev").disabled(true),
+                                Button.secondary("search_next", "Next").disabled(embeds.size() <= 1)
+                        ))
+                        .build()))
+                .flatMap(message ->
+                        message.getClient().on(ButtonInteractionEvent.class)
+                                .filter(e -> e.getMessageId().equals(message.getId()))
+                                .filter(e -> event.getMessage().getAuthor()
+                                        .map(user -> user.getId().equals(e.getUser().getId()))
+                                        .orElse(false))
+                                .flatMap(e -> {
+                                    int page = currentPage.get();
+                                    if (e.getCustomId().equals("search_prev") && page > 0) {
+                                        page--;
+                                        currentPage.set(page);
+                                    } else if (e.getCustomId().equals("search_next") && page < embeds.size() - 1) {
+                                        page++;
+                                        currentPage.set(page);
+                                    } else {
+                                        return e.reply().withEphemeral(true).withContent("No more pages.");
+                                    }
+
+                                    Button prevButton = Button.secondary("search_prev", "Prev").disabled(page == 0);
+                                    Button nextButton = Button.secondary("search_next", "Next").disabled(page == embeds.size() - 1);
+
+                                    return e.edit()
+                                            .withEmbeds(embeds.get(page))
+                                            .withComponents(ActionRow.of(prevButton, nextButton));
+                                })
+                                .then()
+                );
     }
 
     private static Mono<Boolean> ensureSameChannelOrJoin(MessageCreateEvent event) {
