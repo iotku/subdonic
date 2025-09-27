@@ -49,6 +49,9 @@ public class Search {
                     if (song.album() != null && song.album().toLowerCase().contains(query.toLowerCase())) {
                         score += 1; // We probably aren't looking for an album so not super important
                     }
+                    if (song.album() != null && song.album().toLowerCase().contains("live")) {
+                        score -= 5; // Deprioritize live albums
+                    }
                     if (song.artist() != null && song.artist().toLowerCase().contains(query.toLowerCase())) {
                         score += 5;
                     }
