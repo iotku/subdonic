@@ -21,12 +21,13 @@ Then use `gradle run` to launch.
 ## Roadmap
 
 ### Done
-- Join voice channels
-- Play the first search result of a song
+- Join voice channels (`!join` while in a voice channel)
+- Play the first search result of a song (`!play some song name`)
+- Show Search Results (`!search`)
+- Pick Specific Song by Id 
+  - (use `!play #` after using !search, where # is the number of the result)
 
 ## In Progress
-- Show Search Results
-- Pick Specific Song by Id
 - Playback Queue (e.g. add multiple songs)
 
 ## Later
