@@ -21,6 +21,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,7 @@ public class GuildAudioManager {
     private final Snowflake guildId;
     private Snowflake lastTextChannel; // store last channel a command came from
     private Snowflake preferredTextChannel; // e.g. a bot-only channel
+    private final HashMap<Integer, Song> lastSearchResults = new HashMap<>();
 
     static {
         PLAYER_MANAGER = new DefaultAudioPlayerManager();
@@ -173,6 +175,10 @@ public class GuildAudioManager {
 
     public Optional<VoiceConnection> getConnection() {
         return Optional.ofNullable(this.voiceConnection);
+    }
+
+    public HashMap<Integer, Song> getLastSearchResults() {
+        return lastSearchResults;
     }
 
     // Setters

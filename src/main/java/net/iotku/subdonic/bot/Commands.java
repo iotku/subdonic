@@ -102,6 +102,31 @@ public class Commands {
                     event.getMember().map(Member::getId).orElse(null)
             );
 
+            // Check for searched song
+            // Since we start our search number at 1, 0 is considered an empty value
+            int searchNum = 0;
+            if (args.length == 1) {
+                try {
+                    searchNum = Integer.parseInt(args[0]);
+                } catch (NumberFormatException nfe) {
+                    // just do nothing, invalid number
+                    log.info("Couldn't parse {} as int", args[0]);
+                }
+            }
+
+            // We're trying to play a search result
+            HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(event.getGuildId().get()).getLastSearchResults();
+            if (searchNum > 0 && lastSearchResults.containsKey(searchNum)) {
+                // get song by id
+                final int finalSearchNum = searchNum;
+                return Mono.fromCallable(() -> loadTrack(lastSearchResults.get(finalSearchNum), context.guildId()))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .then();
+            } else if (searchNum > 0) {
+                log.info("Search number {} not found in last search results, continuing with normal query", searchNum);
+            }
+
+            // Otherwise just preform normal query
             String query = String.join(" ", args);
             if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
@@ -187,12 +212,24 @@ public class Commands {
             pages.add(results.subList(i, Math.min(i + 5, results.size())));
         }
 
+        HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(guildId).getLastSearchResults();
+        lastSearchResults.clear();
+        AtomicInteger counter = new AtomicInteger(1);
+
         List<EmbedCreateSpec> embeds = new ArrayList<>();
         for (int i = 0; i < pages.size(); i++) {
             List<Song> page = pages.get(i);
+            String desc = page.stream()
+                    .map(s -> {
+                        int num = counter.getAndIncrement();   // grab & increment
+                        lastSearchResults.put(num, s);    // save mapping
+                        return num + ". " + s.artist() + " - " + s.title() + " (" + s.album() + ")";
+                    })
+                    .collect(Collectors.joining("\n"));
+
             embeds.add(EmbedCreateSpec.builder()
                     .title("Search results for: " + query)
-                    .description(page.stream().map(s -> "- " + s.artist() + " - " + s.title() + " (" + s.album() + ")").collect(Collectors.joining("\n")))
+                    .description(desc)
                     .footer("Page " + (i + 1) + " of " + pages.size(), null)
                     .build());
         }
