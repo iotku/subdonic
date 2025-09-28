@@ -58,8 +58,39 @@ public class Commands {
         register("join", Commands::join);
         register("disconnect", Commands::disconnect);
         register("play", Commands::play);
+        register("skip", Commands::skip);
         register("rand", Commands::random);
         register("search", Commands::search);
+    }
+
+    private static Mono<Void> skip (MessageCreateEvent event, String[] args) {
+        return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
+            if (!sameChannel) return Mono.empty(); // must be in same channel
+            Snowflake guildId = event.getGuildId().orElse(null);
+            if (guildId == null) return Mono.empty(); // Do nothing in DMs
+            MessageCtx context = new MessageCtx(
+                    event.getGuildId().get(), // we verified it exists above
+                    event.getMessage().getChannelId(),
+                    event.getMember().map(Member::getId).orElse(null)
+            );
+
+            GuildAudioManager manager = GuildAudioManager.of(context.guildId());
+            // Set lastTextChannel so we know where to put now playing messages
+            manager.setLastTextChannel(context.channelId());
+            int skipAmt;
+            if (args.length == 0) {
+                manager.getScheduler().skip();
+            } else if (args.length == 1) {
+                try {
+                    skipAmt = Integer.parseInt(args[0]);
+                    manager.getScheduler().skip(skipAmt);
+                } catch (NumberFormatException nfe) {
+                    // just do nothing, invalid number
+                }
+            }
+
+            return Mono.empty();
+        });
     }
 
     private static Mono<Void> join(MessageCreateEvent event, String[] args) {
@@ -307,9 +338,8 @@ public class Commands {
         GuildAudioManager.getPlayerManager().loadItem(Stream.getStreamUrl(song), new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
-                manager.getPlayer().startTrack(track, false);
-                log.info("Playing: {} - {}", song.artist(), song.title());
-                manager.sendNowPlayingEmbed(song);
+                track.setUserData(song);
+                manager.getScheduler().play(track);
             }
 
             @Override

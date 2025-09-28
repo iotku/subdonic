@@ -4,24 +4,28 @@ import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
+import net.iotku.subdonic.api.v1.dto.Song;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
+
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Consumer;
 
 public class AudioTrackScheduler extends AudioEventAdapter {
 
-    private final List<AudioTrack> queue;
+    private final Queue<AudioTrack> queue = new ConcurrentLinkedQueue<>();
     private final AudioPlayer player;
+    private Consumer<AudioTrack> onTrackStart;
+    private Consumer<AudioTrack> onTrackAdd;
+    private static final Logger log = LoggerFactory.getLogger(AudioTrackScheduler.class);
 
     public AudioTrackScheduler(AudioPlayer player) {
-        // The queue may be modified by different threads so guarantee memory safety
-        // This does not, however, remove several race conditions currently present
-        queue = Collections.synchronizedList(new LinkedList<>());
         this.player = player;
     }
 
-    public List<AudioTrack> getQueue() {
+    public Queue<AudioTrack> getQueue() {
         return queue;
     }
 
@@ -32,15 +36,34 @@ public class AudioTrackScheduler extends AudioEventAdapter {
     public boolean play(AudioTrack track, boolean force) {
         boolean playing = player.startTrack(track, !force);
 
+        Song song = (Song) track.getUserData(); // extract the Song from the AudioTrack
+
         if (!playing) {
             queue.add(track);
+            if (onTrackAdd != null) onTrackAdd.accept(track);
+            log.info("Added: {} - {}", song.artist(), song.title());
+        } else {
+            if (onTrackStart != null) onTrackStart.accept(track);
+            log.info("Playing: {}", song);
         }
 
         return playing;
     }
 
     public boolean skip() {
-        return !queue.isEmpty() && play(queue.remove(0), true);
+        AudioTrack next = queue.poll(); // removes head of queue, or null if empty
+        return next != null && play(next, true);
+    }
+
+    public boolean skip(int count) {
+        if (count < 0 || count > queue.size()) {
+            return false; // invalid count
+        }
+        for (int i = 0; i < count - 1; i++) {
+            queue.poll(); // discard
+        }
+        AudioTrack next = queue.poll();
+        return next != null && play(next, true);
     }
 
     @Override
@@ -49,5 +72,14 @@ public class AudioTrackScheduler extends AudioEventAdapter {
         if (endReason.mayStartNext) {
             skip();
         }
+    }
+
+    // Setter for the consumers
+    public void setOnTrackStart(Consumer<AudioTrack> onTrackStart) {
+        this.onTrackStart = onTrackStart;
+    }
+
+    public void setOnTrackAdd(Consumer<AudioTrack> onTrackAdd) {
+        this.onTrackAdd = onTrackAdd;
     }
 }

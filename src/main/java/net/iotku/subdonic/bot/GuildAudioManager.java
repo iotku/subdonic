@@ -61,8 +61,26 @@ public class GuildAudioManager {
     private GuildAudioManager(Snowflake guildId) {
         player = PLAYER_MANAGER.createPlayer();
         player.setVolume(45);
+
+        // Build scheduler
         scheduler = new AudioTrackScheduler(player);
+        // Attach the scheduler to the player
+        this.player.addListener(this.scheduler);
+        // Attach the consumer that runs when playback starts
+        scheduler.setOnTrackStart(track -> {
+            // This code runs whenever a track starts playing
+            Song song = (Song) track.getUserData(); // attached metadata
+            sendNowPlayingEmbed(song);
+        });
+
+        scheduler.setOnTrackAdd(track -> {
+            Song song = (Song) track.getUserData(); // attached metadata
+            getPreferredTextChannel().flatMap(ch -> ch.createMessage("Added: " + song.artist() + " - " + song.title()))
+                    .subscribe();
+        });
+
         provider = new LavaPlayerAudioProvider(player);
+
         this.guildId = guildId;
         player.addListener(scheduler);
     }
@@ -210,6 +228,10 @@ public class GuildAudioManager {
     }
     public static AudioPlayerManager getPlayerManager() {
         return PLAYER_MANAGER;
+    }
+
+    public AudioTrackScheduler getScheduler() {
+        return scheduler;
     }
 
     public Optional<VoiceConnection> getConnection() {
