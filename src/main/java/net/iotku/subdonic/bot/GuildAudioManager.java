@@ -14,7 +14,9 @@ import discord4j.core.spec.EmbedCreateSpec;
 import discord4j.core.spec.VoiceChannelJoinSpec;
 import discord4j.voice.VoiceConnection;
 import net.iotku.subdonic.api.v1.dto.Song;
-import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
 import java.net.URLEncoder;
@@ -23,8 +25,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class GuildAudioManager {
     private static final AudioPlayerManager PLAYER_MANAGER;
@@ -36,6 +40,7 @@ public class GuildAudioManager {
     private Snowflake lastTextChannel; // store last channel a command came from
     private Snowflake preferredTextChannel; // e.g. a bot-only channel
     private final HashMap<Integer, Song> lastSearchResults = new HashMap<>();
+    private static final Logger log = LoggerFactory.getLogger(GuildAudioManager.class);
 
     static {
         PLAYER_MANAGER = new DefaultAudioPlayerManager();
@@ -120,6 +125,13 @@ public class GuildAudioManager {
         this.lastTextChannel = lastTextChannel;
     }
 
+
+    private Mono<Boolean> isAlone(VoiceChannel channel) {
+        return channel.getVoiceStates()
+                .count()
+                .map(count -> count == 1L);
+    }
+
     /**
      * Join a VoiceChannel and keep track of membership, e.g. disconnect when empty.
      * @param channel a VoiceChannel to join and keep track membership
@@ -134,31 +146,58 @@ public class GuildAudioManager {
                                 .build()
                 )
                 .doOnNext(this::setConnection)
-                .flatMap(conn -> { // === idle disconnect logic ===
-                    Publisher<Boolean> voiceStateCounter = channel.getVoiceStates()
-                            .count()
-                            .map(count -> count == 1L); // only the bot left
+                .flatMap(conn -> {
+                    AtomicReference<Disposable> listenerRef = new AtomicReference<>();
+                    AtomicReference<Disposable> pendingDisconnect = new AtomicReference<>();
 
-                    Mono<Void> onDelay = Mono.delay(Duration.ofSeconds(10))
-                            .filterWhen(ignored -> voiceStateCounter)
-                            .switchIfEmpty(Mono.never())
-                            .then();
+                    Disposable listener = channel.getClient().getEventDispatcher()
+                            .on(VoiceStateUpdateEvent.class)
+                            .filter(vue -> {
+                                var oldChannel = vue.getOld().flatMap(VoiceState::getChannelId);
+                                var newChannel = vue.getCurrent().getChannelId();
+                                // Only consider events where the user changed channels
+                                return !Objects.equals(oldChannel.orElse(null), newChannel.orElse(null))
+                                        && (oldChannel.map(channel.getId()::equals).orElse(false)
+                                        || newChannel.map(channel.getId()::equals).orElse(false));
+                            })
+                            .flatMap(vue -> {
+                                // Bot left the channel
+                                if (vue.getCurrent().getUserId().equals(Bot.getClient().getSelfId())
+                                        && !vue.getCurrent().getChannelId().map(channel.getId()::equals).orElse(false)) {
+                                    // Dispose any pending timer
+                                    Disposable timer = pendingDisconnect.getAndSet(null);
+                                    if (timer != null && !timer.isDisposed()) timer.dispose();
 
-                    Mono<Void> onEvent = channel.getClient().getEventDispatcher().on(VoiceStateUpdateEvent.class)
-                            .filter(vue -> vue.getOld()
-                                    .flatMap(VoiceState::getChannelId)
-                                    .map(channel.getId()::equals)
-                                    .orElse(false))
-                            .filterWhen(ignored -> voiceStateCounter)
-                            .next()
-                            .then();
+                                    // Dispose the listener itself
+                                    Disposable l = listenerRef.getAndSet(null);
+                                    if (l != null && !l.isDisposed()) l.dispose();
 
-                    // Disconnect the connection when either fires
-                    Mono.firstWithSignal(onDelay, onEvent)
-                            .then(voiceConnection.disconnect())
-                            .subscribe();
+                                    log.info("Bot left channel, cleaned up listener and timers");
+                                    return Mono.empty();
+                                }
+                                return isAlone(channel);
+                            })
+                            .subscribe(alone -> {
+                                if (alone) {
+                                    if (pendingDisconnect.get() == null || pendingDisconnect.get().isDisposed()) {
+                                        log.info("Channel empty, disconnecting in 10s");
+                                        Disposable timer = Mono.delay(Duration.ofSeconds(10))
+                                                .flatMap(t -> isAlone(channel))
+                                                .filter(Boolean::booleanValue)
+                                                .flatMap(t -> conn.disconnect())
+                                                .subscribe();
+                                        pendingDisconnect.set(timer);
+                                    }
+                                } else {
+                                    Disposable timer = pendingDisconnect.getAndSet(null);
+                                    if (timer != null && !timer.isDisposed()) timer.dispose();
+                                    log.info("Channel refilled, disposing timer");
+                                }
+                            });
 
-                    return Mono.just(voiceConnection); // immediate result
+                    listenerRef.set(listener); // store it so we can dispose inside lambda
+
+                    return Mono.just(conn);
                 });
     }
 
