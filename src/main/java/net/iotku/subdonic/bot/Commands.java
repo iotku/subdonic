@@ -79,7 +79,7 @@ public class Commands {
             manager.setLastTextChannel(context.channelId());
             int skipAmt;
             if (args.length == 0) {
-                manager.getScheduler().skip();
+                manager.getScheduler().skip(1);
             } else if (args.length == 1) {
                 try {
                     skipAmt = Integer.parseInt(args[0]);

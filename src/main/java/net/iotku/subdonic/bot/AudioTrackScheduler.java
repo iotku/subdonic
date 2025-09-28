@@ -56,7 +56,7 @@ public class AudioTrackScheduler extends AudioEventAdapter {
     }
 
     public boolean skip(int count) {
-        if (count < 0 || count > queue.size()) {
+        if (count < 1 || count > queue.size()) {
             return false; // invalid count
         }
         for (int i = 0; i < count - 1; i++) {

@@ -65,7 +65,7 @@ public class GuildAudioManager {
         // Build scheduler
         scheduler = new AudioTrackScheduler(player);
         // Attach the scheduler to the player
-        this.player.addListener(this.scheduler);
+        player.addListener(scheduler);
         // Attach the consumer that runs when playback starts
         scheduler.setOnTrackStart(track -> {
             // This code runs whenever a track starts playing
@@ -82,7 +82,6 @@ public class GuildAudioManager {
         provider = new LavaPlayerAudioProvider(player);
 
         this.guildId = guildId;
-        player.addListener(scheduler);
     }
 
     /**
