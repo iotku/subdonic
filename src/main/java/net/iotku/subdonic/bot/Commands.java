@@ -88,14 +88,10 @@ public class Commands {
     }
 
     private static Mono<Void> play (MessageCreateEvent event, String[] args) {
+        if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
-            if (!sameChannel) {
-                return event.getMessage().getChannel()
-                        .flatMap(ch ->
-                                ch.createMessage("Must be in same voice channel to play music!")).then();
-            }
+            if (!sameChannel) return Mono.empty(); // must be in same channel
 
-            if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
             MessageCtx context = new MessageCtx(
                     event.getGuildId().get(), // we verified it exists above
                     event.getMessage().getChannelId(),
@@ -148,11 +144,7 @@ public class Commands {
     }
     private static Mono<Void> random (MessageCreateEvent event, String[] args) {
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
-            if (!sameChannel) {
-                return event.getMessage().getChannel()
-                        .flatMap(ch ->
-                                ch.createMessage("Must be in same voice channel to play music!")).then();
-            }
+            if (!sameChannel) return Mono.empty(); // Must be in the same voice channel as the bot
 
             if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
             MessageCtx context = new MessageCtx(
@@ -286,12 +278,23 @@ public class Commands {
                                     if (botChannel.getId().equals(userChannel.getId())) { // bot in same channel
                                         return Mono.just(true);
                                     }
-                                    return Mono.just(false); // bot in a different channel
+
+                                    log.info("{} not in same voice voice channel, don't run command.",
+                                            event.getMember().map(m -> m.getId().asString()).orElse("Unknown user"));
+                                    return event.getMessage().getChannel()
+                                            .flatMap(ch -> ch.createMessage("You must be in the same voice channel to use this command!"))
+                                            .then(Mono.just(false));
                                 })
                                 // bot not in any channel, Join User's channel
                                 .switchIfEmpty(GuildAudioManager.of(guildId).joinAndTrack(userChannel).thenReturn(true))
                         )
-                );
+                ).switchIfEmpty(Mono.defer(() -> { // user is not in a voice channel
+                    log.info("{} not in a voice channel, don't run command.",
+                            event.getMember().map(m -> m.getId().asString()).orElse("Unknown user"));
+                    return event.getMessage().getChannel()
+                            .flatMap(ch -> ch.createMessage("You must be in a voice channel to use this command!"))
+                            .then(Mono.just(false));
+                }));
     }
 
     private static Song loadTrack(Song song, Snowflake guildId) {
