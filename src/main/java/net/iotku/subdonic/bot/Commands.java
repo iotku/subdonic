@@ -75,16 +75,21 @@ public class Commands {
     }
 
     private static Mono<Void> disconnect(MessageCreateEvent event, String[] args) {
-        Snowflake guildId = event.getGuildId().orElse(null);
-        if (guildId == null) return Mono.empty(); // DMs
+        return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
+            if (!sameChannel) return Mono.empty(); // must be in same channel
 
-        GuildAudioManager manager = GuildAudioManager.of(guildId);
-        return Mono.justOrEmpty(manager.getConnection())
-                .flatMap(VoiceConnection::disconnect)
-                .then(event.getMessage()
-                        .getChannel()
-                        .flatMap(ch -> ch.createMessage("Disconnected from voice channel.")))
-                .then();
+            Snowflake guildId = event.getGuildId().orElse(null);
+            if (guildId == null) return Mono.empty(); // Do nothing in DMs
+
+            GuildAudioManager manager = GuildAudioManager.of(guildId);
+            manager.setLastTextChannel(event.getMessage().getChannelId());
+            return Mono.justOrEmpty(manager.getConnection())
+                    .flatMap(VoiceConnection::disconnect)
+                    .then(event.getMessage()
+                            .getChannel()
+                            .flatMap(ch -> ch.createMessage("Disconnected from voice channel.")))
+                    .then();
+        });
     }
 
     private static Mono<Void> play (MessageCreateEvent event, String[] args) {
