@@ -146,14 +146,7 @@ public class SubsonicController {
                 .replace(" ", "%20")
                 .replace("&f=xml", "&f=json"); // NOTE: createUrl enforces &f=xml, so we rewrite this
 
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(urlStr))
-                .GET()
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
+        HttpResponse<String> response = Http.makeRequest(urlStr);
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(response.body());
 
