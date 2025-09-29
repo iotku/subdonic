@@ -54,13 +54,48 @@ public class Commands {
 
     static {
         register("ping", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
-        register("pong", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Ping!").then());
         register("join", Commands::join);
         register("disconnect", Commands::disconnect);
+
+        // Play
+        register("p", Commands::play);
         register("play", Commands::play);
+        register("add", Commands::play);
+
+        // Stop
+        register("stop", Commands::stop);
+
+        // Skip
         register("skip", Commands::skip);
+        register("s", Commands::skip);
+
+        // Random
+        register("r", Commands::random);
         register("rand", Commands::random);
+        register("random", Commands::random);
+
+        // View Queue
+        register("list", Commands::list);
+        register("queue", Commands::list);
+
+        // Search
         register("search", Commands::search);
+    }
+
+    private static Mono<Void> stop(MessageCreateEvent event, String[] strings) {
+        return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
+            if (!sameChannel) return Mono.empty();
+            Snowflake guildId = event.getGuildId().orElse(null);
+            if (guildId == null) return Mono.empty(); // Do nothing in DMs
+            MessageCtx context = new MessageCtx(
+                    event.getGuildId().get(), // we verified it exists above
+                    event.getMessage().getChannelId(),
+                    event.getMember().map(Member::getId).orElse(null)
+            );
+            GuildAudioManager manager = GuildAudioManager.of(context.guildId());
+            manager.getPlayer().setPaused(true);
+            return Mono.empty();
+        });
     }
 
     private static Mono<Void> skip (MessageCreateEvent event, String[] args) {
@@ -134,6 +169,14 @@ public class Commands {
                     event.getMember().map(Member::getId).orElse(null)
             );
 
+            if (args.length == 0) {
+                // just resume if paused
+                if (GuildAudioManager.of(context.guildId()).getPlayer().isPaused()) {
+                    GuildAudioManager.of(context.guildId()).getPlayer().setPaused(false);
+                }
+                return Mono.empty();
+            }
+
             // Check for searched song
             // Since we start our search number at 1, 0 is considered an empty value
             int searchNum = 0;
@@ -142,7 +185,6 @@ public class Commands {
                     searchNum = Integer.parseInt(args[0]);
                 } catch (NumberFormatException nfe) {
                     // just do nothing, invalid number
-                    log.info("Couldn't parse {} as int", args[0]);
                 }
             }
 
@@ -182,6 +224,19 @@ public class Commands {
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
             if (!sameChannel) return Mono.empty(); // Must be in the same voice channel as the bot
 
+            int count = 1;
+            if (args.length == 1) {
+                try {
+                    count = Integer.parseInt(args[0]);
+                } catch (NumberFormatException nfe) {
+                    // just do nothing, invalid number
+                }
+            }
+
+            if (count > 5) {
+                count = 5;
+            }
+
             if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
             MessageCtx context = new MessageCtx(
                     event.getGuildId().get(), // we verified it exists above
@@ -195,7 +250,8 @@ public class Commands {
             // Set lastTextChannel so we know where to put now playing messages
             GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
 
-            return Mono.fromCallable(() -> Search.random(context, 5)).subscribeOn(Schedulers.boundedElastic())
+            int finalCount = count;
+            return Mono.fromCallable(() -> Search.random(context, finalCount)).subscribeOn(Schedulers.boundedElastic())
                     .flatMap(songs -> songs.stream().findFirst()
                             .map(firstSong ->
                                     Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
@@ -257,6 +313,102 @@ public class Commands {
 
             embeds.add(EmbedCreateSpec.builder()
                     .title("Search results for: " + query)
+                    .description(desc)
+                    .footer("Page " + (i + 1) + " of " + pages.size(), null)
+                    .build());
+        }
+
+        AtomicInteger currentPage = new AtomicInteger(0);
+
+        // Send first page with buttons
+        return event.getMessage().getChannel()
+                .flatMap(channel -> channel.createMessage(MessageCreateSpec.builder()
+                        .addEmbed(embeds.getFirst())
+                        .addComponent(ActionRow.of(
+                                Button.secondary("search_prev", "Prev").disabled(true),
+                                Button.secondary("search_next", "Next").disabled(embeds.size() <= 1)
+                        ))
+                        .build()))
+                .flatMap(message ->
+                        message.getClient().on(ButtonInteractionEvent.class)
+                                .filter(e -> e.getMessageId().equals(message.getId()))
+                                .filter(e -> event.getMessage().getAuthor()
+                                        .map(user -> user.getId().equals(e.getUser().getId()))
+                                        .orElse(false))
+                                .flatMap(e -> {
+                                    int page = currentPage.get();
+                                    if (e.getCustomId().equals("search_prev") && page > 0) {
+                                        page--;
+                                        currentPage.set(page);
+                                    } else if (e.getCustomId().equals("search_next") && page < embeds.size() - 1) {
+                                        page++;
+                                        currentPage.set(page);
+                                    } else {
+                                        return e.reply().withEphemeral(true).withContent("No more pages.");
+                                    }
+
+                                    Button prevButton = Button.secondary("search_prev", "Prev").disabled(page == 0);
+                                    Button nextButton = Button.secondary("search_next", "Next").disabled(page == embeds.size() - 1);
+
+                                    return e.edit()
+                                            .withEmbeds(embeds.get(page))
+                                            .withComponents(ActionRow.of(prevButton, nextButton));
+                                })
+                                .then()
+                );
+    }
+
+    private static Mono<Void> list (MessageCreateEvent event, String[] args) {
+        if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+
+        Snowflake guildId = event.getGuildId().get();
+
+        // Generate search results
+        Queue<AudioTrack> queue = GuildAudioManager.of(guildId).getScheduler().getQueue();
+        int count = 0;
+        List<Song> results = new ArrayList<>();
+        for (AudioTrack item : queue) {
+            results.add((Song) item.getUserData());
+            count++;
+            if (count >= 20) break;
+        }
+
+        if (results.isEmpty()) {
+            EmbedCreateSpec noResults = EmbedCreateSpec.builder()
+                    .title("Queue is empty")
+                    .description("Use !search and !play to find some tracks!")
+                    .build();
+
+            return event.getMessage().getChannel()
+                    .flatMap(ch -> ch.createMessage(MessageCreateSpec.builder()
+                            .addEmbed(noResults)
+                            .build()))
+                    .then();
+        }
+
+        // Limit to 5 Pages
+        List<List<Song>> pages = new ArrayList<>();
+        for (int i = 0; i < results.size(); i += 5) {
+            pages.add(results.subList(i, Math.min(i + 5, results.size())));
+        }
+
+        HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(guildId).getLastSearchResults();
+        lastSearchResults.clear();
+        AtomicInteger counter = new AtomicInteger(1);
+
+        List<EmbedCreateSpec> embeds = new ArrayList<>();
+        for (int i = 0; i < pages.size(); i++) {
+            List<Song> page = pages.get(i);
+            String desc = page.stream()
+                    .map(s -> {
+                        int num = counter.getAndIncrement();   // grab & increment
+                        lastSearchResults.put(num, s);    // save mapping
+                        return num + ". " + s.artist() + " - " + s.title() + " (" + s.album() + ")";
+                    })
+                    .collect(Collectors.joining("\n"));
+
+            embeds.add(EmbedCreateSpec.builder()
+                    .title("Playback Queue")
                     .description(desc)
                     .footer("Page " + (i + 1) + " of " + pages.size(), null)
                     .build());
