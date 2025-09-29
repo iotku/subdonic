@@ -6,6 +6,7 @@ import net.beardbot.subsonic.client.Subsonic;
 import net.beardbot.subsonic.client.base.SubsonicIncompatibilityException;
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.api.v1.filter.SubsonicFilter;
+import net.iotku.subdonic.client.Http;
 import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -105,24 +106,17 @@ public class SubsonicController {
      * proxyStream /stream/{id} endpoint
      * @param id subsonic id from search response for distinct song
      * @return Stream of audio data provided by the subsonic server
-     * @throws IOException if an error occurs deploying the ResponseEntity
      */
     @GetMapping("/stream/{id}")
-    public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) throws IOException, InterruptedException {
+    public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) {
         // ! NOTE: spaces in the URL (e.g. from the subsonic client name) will DOOM YOU !
         String safeUrl = subsonic.media().stream(id).getUrl()
                 .toString()
                 .replace(" ", "%20");
 
-        HttpClient client = HttpClient.newHttpClient(); // TODO: Do we want to maintain a HttpClient?
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(safeUrl))
-                .GET()
-                .build();
-
         HttpResponse<InputStream> response;
         try {
-            response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            response = Http.makeRequestStream(safeUrl);
         } catch (IOException | InterruptedException e) {
             log.error("Failed to fetch stream for id {}", id, e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
