@@ -44,15 +44,6 @@ public class Commands {
         this.instance = instance;
     }
 
-    /**
-     * The message event was sent by the instance specified Owner of the Bot (as determined by the Discord API)
-     * @param event a MessageCreateEvent
-     * @return true if the message was sent by The Owner, false otherwise
-     */
-    private boolean messageIsAdmin(MessageCreateEvent event) { // TODO: There's probably a neater way to do this
-        return event.getMessage().getAuthor().isPresent() && event.getMessage().getAuthor().get().getId().asLong() == instance.getOwnerId();
-    }
-
     static {
         register("ping", (event, args) -> Objects.requireNonNull(event.getMessage().getChannel().block()).createMessage("Pong!").then());
         register("join", Commands::join);
@@ -82,6 +73,15 @@ public class Commands {
 
         // Search
         register("search", Commands::search);
+    }
+
+    /**
+     * The message event was sent by the instance specified Owner of the Bot (as determined by the Discord API)
+     * @param event a MessageCreateEvent
+     * @return true if the message was sent by The Owner, false otherwise
+     */
+    private boolean messageIsAdmin(MessageCreateEvent event) { // TODO: There's probably a neater way to do this
+        return event.getMessage().getAuthor().isPresent() && event.getMessage().getAuthor().get().getId().asLong() == instance.getOwnerId();
     }
 
     private static Mono<Void> stop(MessageCreateEvent event, String[] strings) {
@@ -397,7 +397,7 @@ public class Commands {
                     .collect(Collectors.joining("\n"));
 
             embeds.add(EmbedCreateSpec.builder()
-                    .title("Playback Queue")
+                    .title("Playback Queue (" + manager.getScheduler().getQueue().size() + " Tracks Queued)")
                     .description(desc)
                     .footer("Page " + (i + 1) + " of " + pages.size(), null)
                     .build());

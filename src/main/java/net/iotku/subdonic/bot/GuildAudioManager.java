@@ -106,7 +106,7 @@ public class GuildAudioManager {
 //                .thumbnail("https://i.imgur.com/F9BhEoz.png")
 //                .image("https://i.imgur.com/F9BhEoz.png")
                 .timestamp(Instant.now())
-                .footer("Subdonic", "https://i.imgur.com/9JhMjVX.png")
+                .footer(getScheduler().getQueue().size() + " Tracks Queued.", "https://i.imgur.com/9JhMjVX.png")
                 .build();
 
         getPreferredTextChannel()
