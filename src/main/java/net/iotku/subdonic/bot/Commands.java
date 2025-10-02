@@ -84,35 +84,26 @@ public class Commands {
     }
 
     private static Mono<Void> stop(MessageCreateEvent event, String[] strings) {
+        MessageCtx ctx = MessageCtx.buildCtx(event);
+        if (ctx.guildId() == null) return Mono.empty(); // do nothing in DMs
+
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
             if (!sameChannel) return Mono.empty();
-            Snowflake guildId = event.getGuildId().orElse(null);
-            if (guildId == null) return Mono.empty(); // Do nothing in DMs
-            MessageCtx context = new MessageCtx(
-                    event.getGuildId().get(), // we verified it exists above
-                    event.getMessage().getChannelId(),
-                    event.getMember().map(Member::getId).orElse(null)
-            );
-            GuildAudioManager manager = GuildAudioManager.of(context.guildId());
+            GuildAudioManager manager = GuildAudioManager.of(ctx.guildId());
             manager.getPlayer().setPaused(true);
             return Mono.empty();
         });
     }
 
     private static Mono<Void> skip (MessageCreateEvent event, String[] args) {
+        MessageCtx ctx = MessageCtx.buildCtx(event);
+        if (ctx.guildId() == null) return Mono.empty(); // Do nothing in DMs
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
             if (!sameChannel) return Mono.empty(); // must be in same channel
-            Snowflake guildId = event.getGuildId().orElse(null);
-            if (guildId == null) return Mono.empty(); // Do nothing in DMs
-            MessageCtx context = new MessageCtx(
-                    event.getGuildId().get(), // we verified it exists above
-                    event.getMessage().getChannelId(),
-                    event.getMember().map(Member::getId).orElse(null)
-            );
 
-            GuildAudioManager manager = GuildAudioManager.of(context.guildId());
+            GuildAudioManager manager = GuildAudioManager.of(ctx.guildId());
             // Set lastTextChannel so we know where to put now playing messages
-            manager.setLastTextChannel(context.channelId());
+            manager.setLastTextChannel(ctx.channelId());
             int skipAmt;
             if (args.length == 0) {
                 manager.getScheduler().skip(1);
@@ -142,14 +133,14 @@ public class Commands {
     }
 
     private static Mono<Void> disconnect(MessageCreateEvent event, String[] args) {
+        MessageCtx ctx = MessageCtx.buildCtx(event);
+        if (ctx.guildId() == null) return Mono.empty(); // Do nothing in DMs
+
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
             if (!sameChannel) return Mono.empty(); // must be in same channel
+            GuildAudioManager manager = GuildAudioManager.of(ctx.guildId());
 
-            Snowflake guildId = event.getGuildId().orElse(null);
-            if (guildId == null) return Mono.empty(); // Do nothing in DMs
-
-            GuildAudioManager manager = GuildAudioManager.of(guildId);
-            manager.setLastTextChannel(event.getMessage().getChannelId());
+            manager.setLastTextChannel(ctx.channelId());
             return Mono.justOrEmpty(manager.getConnection())
                     .flatMap(VoiceConnection::disconnect)
                     .then(event.getMessage()
@@ -160,20 +151,16 @@ public class Commands {
     }
 
     private static Mono<Void> play (MessageCreateEvent event, String[] args) {
-        if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+        MessageCtx ctx = MessageCtx.buildCtx(event);
+        if (ctx.guildId() == null) return Mono.empty(); // do nothing in DMs
+
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
             if (!sameChannel) return Mono.empty(); // must be in same channel
 
-            MessageCtx context = new MessageCtx(
-                    event.getGuildId().get(), // we verified it exists above
-                    event.getMessage().getChannelId(),
-                    event.getMember().map(Member::getId).orElse(null)
-            );
-
             if (args.length == 0) {
                 // just resume if paused
-                if (GuildAudioManager.of(context.guildId()).getPlayer().isPaused()) {
-                    GuildAudioManager.of(context.guildId()).getPlayer().setPaused(false);
+                if (GuildAudioManager.of(ctx.guildId()).getPlayer().isPaused()) {
+                    GuildAudioManager.of(ctx.guildId()).getPlayer().setPaused(false);
                 }
                 return Mono.empty();
             }
@@ -194,7 +181,7 @@ public class Commands {
             if (searchNum > 0 && lastSearchResults.containsKey(searchNum)) {
                 // get song by id
                 final int finalSearchNum = searchNum;
-                return Mono.fromCallable(() -> loadTrack(lastSearchResults.get(finalSearchNum), context.guildId()))
+                return Mono.fromCallable(() -> loadTrack(lastSearchResults.get(finalSearchNum), ctx.guildId()))
                         .subscribeOn(Schedulers.boundedElastic())
                         .then();
             } else if (searchNum > 0) {
@@ -203,15 +190,15 @@ public class Commands {
 
             // Otherwise just preform normal query
             String query = String.join(" ", args);
-            if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+            if (queryTooLong(ctx, query)) return Mono.empty();
 
             // Set lastTextChannel so we know where to put now playing messages
-            GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
+            GuildAudioManager.of(ctx.guildId()).setLastTextChannel(ctx.channelId());
 
-            return Mono.fromCallable(() -> Search.search3(context, query)).subscribeOn(Schedulers.boundedElastic())
+            return Mono.fromCallable(() -> Search.search3(ctx, query)).subscribeOn(Schedulers.boundedElastic())
                     .flatMap(songs -> songs.stream().findFirst()
                             .map(firstSong ->
-                                    Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
+                                    Mono.fromCallable(() -> loadTrack(firstSong, ctx.guildId()))
                                             .subscribeOn(Schedulers.boundedElastic())
                                             .then()
                             )
@@ -221,6 +208,7 @@ public class Commands {
                     );
         });
     }
+
     private static Mono<Void> random (MessageCreateEvent event, String[] args) {
         MessageCtx context = MessageCtx.buildCtx(event);
         if (context.guildId() == null) return Mono.empty(); // do nothing in DMs
@@ -267,20 +255,16 @@ public class Commands {
     }
 
     private static Mono<Void> search (MessageCreateEvent event, String[] args) throws IOException, InterruptedException {
-        if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+        MessageCtx ctx = MessageCtx.buildCtx(event);
+        if (ctx.guildId() == null) return Mono.empty(); // do nothing in DMs
 
         Snowflake guildId = event.getGuildId().get();
-        MessageCtx context = new MessageCtx(
-                guildId,
-                event.getMessage().getChannelId(),
-                event.getMember().map(Member::getId).orElse(null)
-        );
 
         String query = String.join(" ", args);
-        if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
+        if (queryTooLong(ctx, query)) return Mono.empty();
 
         // Generate search results
-        List<Song> results = Search.search3(context, query);
+        List<Song> results = Search.search3(ctx, query);
 
         if (results.isEmpty()) {
             EmbedCreateSpec noResults = EmbedCreateSpec.builder()
@@ -363,13 +347,14 @@ public class Commands {
                 );
     }
 
-    private static Mono<Void> list (MessageCreateEvent event, String[] args) {
-        if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
+    private static Mono<Void> list (MessageCreateEvent event, String[] args) { // TODO: do we set last text channel for this?
+        MessageCtx ctx = MessageCtx.buildCtx(event);
+        if (ctx.guildId() == null) return Mono.empty(); // do nothing in DMs
 
-        Snowflake guildId = event.getGuildId().get();
+        GuildAudioManager manager = GuildAudioManager.of(ctx.guildId());
 
         // Generate search results
-        Queue<AudioTrack> queue = GuildAudioManager.of(guildId).getScheduler().getQueue();
+        Queue<AudioTrack> queue = manager.getScheduler().getQueue();
         int count = 0;
         List<Song> results = new ArrayList<>();
         for (AudioTrack item : queue) {
@@ -397,7 +382,7 @@ public class Commands {
             pages.add(results.subList(i, Math.min(i + 5, results.size())));
         }
 
-        HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(guildId).getLastSearchResults();
+        HashMap<Integer, Song> lastSearchResults = manager.getLastSearchResults();
         lastSearchResults.clear();
         AtomicInteger counter = new AtomicInteger(1);
 
