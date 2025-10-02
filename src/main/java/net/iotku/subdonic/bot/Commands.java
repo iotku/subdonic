@@ -178,7 +178,7 @@ public class Commands {
             }
 
             // We're trying to play a search result
-            HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(event.getGuildId().get()).getLastSearchResults();
+            HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(ctx.guildId()).getLastSearchResults();
             if (searchNum > 0 && lastSearchResults.containsKey(searchNum)) {
                 // get song by id
                 final int finalSearchNum = searchNum;
@@ -255,11 +255,9 @@ public class Commands {
         });
     }
 
-    private static Mono<Void> search (MessageCreateEvent event, String[] args) throws IOException, InterruptedException {
+    private static Mono<Void> search (MessageCreateEvent event, String[] args) throws IOException, InterruptedException { // TODO: SHOULD we set last text channel for this?
         MessageCtx ctx = MessageCtx.buildCtx(event);
         if (ctx.guildId() == null) return Mono.empty(); // do nothing in DMs
-
-        Snowflake guildId = event.getGuildId().get();
 
         String query = String.join(" ", args);
         if (queryTooLong(ctx, query)) return Mono.empty();
@@ -286,7 +284,7 @@ public class Commands {
             pages.add(results.subList(i, Math.min(i + 5, results.size())));
         }
 
-        HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(guildId).getLastSearchResults();
+        HashMap<Integer, Song> lastSearchResults = GuildAudioManager.of(ctx.guildId()).getLastSearchResults();
         lastSearchResults.clear();
         AtomicInteger counter = new AtomicInteger(1);
 
