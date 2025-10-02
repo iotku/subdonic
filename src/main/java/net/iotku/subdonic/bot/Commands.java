@@ -65,6 +65,7 @@ public class Commands {
 
         // Stop
         register("stop", Commands::stop);
+        register("pause", Commands::stop);
 
         // Skip
         register("skip", Commands::skip);
