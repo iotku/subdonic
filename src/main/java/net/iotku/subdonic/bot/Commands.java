@@ -18,11 +18,12 @@ import discord4j.voice.VoiceConnection;
 
 import java.io.IOException;
 import java.util.stream.Collectors;
-
+import java.util.stream.Stream;
 
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.client.Search;
-import net.iotku.subdonic.client.Stream;
+import static net.iotku.subdonic.client.Stream.getStreamUrl;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -221,6 +222,10 @@ public class Commands {
         });
     }
     private static Mono<Void> random (MessageCreateEvent event, String[] args) {
+        MessageCtx context = MessageCtx.buildCtx(event);
+        if (context.guildId() == null) return Mono.empty(); // do nothing in DMs
+        // TODO: In the future, consider adding a cooldown to avoid abuse
+
         return ensureSameChannelOrJoin(event).flatMap(sameChannel -> {
             if (!sameChannel) return Mono.empty(); // Must be in the same voice channel as the bot
 
@@ -228,36 +233,36 @@ public class Commands {
             if (args.length == 1) {
                 try {
                     count = Integer.parseInt(args[0]);
-                } catch (NumberFormatException nfe) {
-                    // just do nothing, invalid number
-                }
+                } catch (NumberFormatException ignored) {} // just do nothing, invalid number
             }
 
+            // Avoid pointless !rand 0 or potential underflow
+            if (count < 1) {
+                return Mono.empty();
+            }
+
+            // Maximum count limit per command
             if (count > 5) {
                 count = 5;
             }
-
-            if (event.getGuildId().isEmpty()) return Mono.empty(); // do nothing in DMs
-            MessageCtx context = new MessageCtx(
-                    event.getGuildId().get(), // we verified it exists above
-                    event.getMessage().getChannelId(),
-                    event.getMember().map(Member::getId).orElse(null)
-            );
-
-            String query = String.join(" ", args);
-            if (queryTooLong(context, query) || context.guildId() == null) return Mono.empty();
 
             // Set lastTextChannel so we know where to put now playing messages
             GuildAudioManager.of(context.guildId()).setLastTextChannel(context.channelId());
 
             int finalCount = count;
-            return Mono.fromCallable(() -> Search.random(context, finalCount)).subscribeOn(Schedulers.boundedElastic())
-                    .flatMap(songs -> songs.stream().findFirst()
-                            .map(firstSong ->
-                                    Mono.fromCallable(() -> loadTrack(firstSong, context.guildId()))
-                                            .subscribeOn(Schedulers.boundedElastic()).then()
-                            ).orElse(Mono.empty())
-                    );
+            return Mono.fromCallable(() -> Search.random(context, 10)) // we request 10 results, but limit to count
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .flatMapMany(songs -> {
+                        Stream<Song> stream = songs.stream();
+                        stream = stream.limit(finalCount);
+                        return Flux.fromStream(stream)
+                                .flatMap(song ->
+                                        Mono.fromCallable(() -> loadTrack(song, context.guildId()))
+                                                .subscribeOn(Schedulers.boundedElastic())
+                                                .then()
+                                );
+                    })
+                    .then();
         });
     }
 
@@ -487,7 +492,7 @@ public class Commands {
 
     private static Song loadTrack(Song song, Snowflake guildId) {
         GuildAudioManager manager = GuildAudioManager.of(guildId);
-        GuildAudioManager.getPlayerManager().loadItem(Stream.getStreamUrl(song), new AudioLoadResultHandler() {
+        GuildAudioManager.getPlayerManager().loadItem(getStreamUrl(song), new AudioLoadResultHandler() {
             @Override
             public void trackLoaded(AudioTrack track) {
                 track.setUserData(song);
