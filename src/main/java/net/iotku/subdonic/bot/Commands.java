@@ -1,8 +1,5 @@
 package net.iotku.subdonic.bot;
 
-import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
-import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
-import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import discord4j.common.util.Snowflake;
 import discord4j.core.event.domain.interaction.ButtonInteractionEvent;
@@ -22,7 +19,8 @@ import java.util.stream.Stream;
 
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.client.Search;
-import static net.iotku.subdonic.client.Stream.getStreamUrl;
+
+import static net.iotku.subdonic.bot.AudioTrackScheduler.loadTrack;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
@@ -472,33 +470,6 @@ public class Commands {
                             .flatMap(ch -> ch.createMessage("You must be in a voice channel to use this command!"))
                             .then(Mono.just(false));
                 }));
-    }
-
-    private static Song loadTrack(Song song, Snowflake guildId) {
-        GuildAudioManager manager = GuildAudioManager.of(guildId);
-        GuildAudioManager.getPlayerManager().loadItem(getStreamUrl(song), new AudioLoadResultHandler() {
-            @Override
-            public void trackLoaded(AudioTrack track) {
-                track.setUserData(song);
-                manager.getScheduler().play(track);
-            }
-
-            @Override
-            public void playlistLoaded(AudioPlaylist playlist) {
-
-            }
-
-            @Override
-            public void noMatches() {
-
-            }
-
-            @Override
-            public void loadFailed(FriendlyException exception) {
-                log.error("Loading track failed: ", exception);
-            }
-        });
-        return song;
     }
 
     private static boolean queryTooLong(MessageCtx ctx, String query) {

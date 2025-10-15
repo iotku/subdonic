@@ -1,9 +1,13 @@
 package net.iotku.subdonic.bot;
 
+import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
+import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
+import discord4j.common.util.Snowflake;
 import net.iotku.subdonic.api.v1.dto.Song;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
+
+import static net.iotku.subdonic.client.Stream.getStreamUrl;
 
 public class AudioTrackScheduler extends AudioEventAdapter {
 
@@ -23,6 +29,11 @@ public class AudioTrackScheduler extends AudioEventAdapter {
 
     public AudioTrackScheduler(AudioPlayer player) {
         this.player = player;
+    }
+
+    static Song loadTrack(Song song, Snowflake guildId) {
+        GuildAudioManager.getPlayerManager().loadItem(getStreamUrl(song), new TrackLoadHandler(song, guildId));
+        return song;
     }
 
     public Queue<AudioTrack> getQueue() {
