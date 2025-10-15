@@ -3,6 +3,7 @@ package net.iotku.subdonic.api.v1;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.beardbot.subsonic.client.Subsonic;
+import net.beardbot.subsonic.client.api.search.SearchParams;
 import net.beardbot.subsonic.client.base.SubsonicIncompatibilityException;
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.api.v1.filter.SubsonicFilter;
