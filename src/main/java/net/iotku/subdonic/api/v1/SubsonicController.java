@@ -67,7 +67,9 @@ public class SubsonicController {
     @ResponseBody
     public List<Song> search2(@RequestParam String query) {
         query = query.replace(" - ", " "); // Make "artist - title" queries more reliable
-        return subsonic.searching().search2(query).getSongs().stream()
+        SearchParams sp = SearchParams.create();
+        sp.songCount(50); // up to 10 pages of 5
+        return subsonic.searching().search2(query, sp).getSongs().stream()
                 .map(child -> new Song(
                         child.getTitle(),
                         child.getArtist(),
@@ -88,7 +90,9 @@ public class SubsonicController {
     @ResponseBody
     public List<Song> search3(@RequestParam String query) {
         query = query.replace(" - ", " "); // Make "artist - title" queries more reliable
-        return subsonic.searching().search3(query).getSongs().stream()
+        SearchParams sp = SearchParams.create();
+        sp.songCount(50); // up to 10 pages of 5
+        return subsonic.searching().search3(query, sp).getSongs().stream()
                 .map(child -> new Song(
                         child.getTitle(),
                         child.getArtist(),
