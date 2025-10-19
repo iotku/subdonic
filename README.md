@@ -26,8 +26,6 @@ Then use `gradle run` to launch.
 - Show Search Results (`!search`)
 - Pick Specific Song by Id 
   - (use `!play #` after using !search, where # is the number of the result)
-
-## In Progress
 - Playback Queue (e.g. add multiple songs)
 
 ## Later
