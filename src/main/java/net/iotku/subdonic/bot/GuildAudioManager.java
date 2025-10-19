@@ -10,8 +10,8 @@ import discord4j.core.event.domain.VoiceStateUpdateEvent;
 import discord4j.core.object.VoiceState;
 import discord4j.core.object.entity.Guild;
 import discord4j.core.object.entity.channel.*;
+import discord4j.core.spec.AudioChannelJoinSpec;
 import discord4j.core.spec.EmbedCreateSpec;
-import discord4j.core.spec.VoiceChannelJoinSpec;
 import discord4j.voice.VoiceConnection;
 import net.iotku.subdonic.api.v1.dto.Song;
 import org.slf4j.Logger;
@@ -143,21 +143,21 @@ public class GuildAudioManager {
     }
 
 
-    private Mono<Boolean> isAlone(VoiceChannel channel) {
+    private Mono<Boolean> isAlone(AudioChannel channel) {
         return channel.getVoiceStates()
                 .count()
                 .map(count -> count == 1L);
     }
 
     /**
-     * Join a VoiceChannel and keep track of membership, e.g. disconnect when empty.
-     * @param channel a VoiceChannel to join and keep track membership
+     * Join a AudioChannel and keep track of membership, e.g. disconnect when empty.
+     * @param channel a AudioChannel to join and keep track membership
      * @return a {@code Mono} that completes with the active {@link VoiceConnection}
      *         once the bot has joined
      */
-    public Mono<VoiceConnection> joinAndTrack(VoiceChannel channel) {
+    public Mono<VoiceConnection> joinAndTrack(AudioChannel channel) {
         return channel.join(
-                        VoiceChannelJoinSpec.builder()
+                        AudioChannelJoinSpec.builder()
                                 .provider(getProvider())
                                 .selfDeaf(true)
                                 .build()
