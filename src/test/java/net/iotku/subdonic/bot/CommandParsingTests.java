@@ -21,18 +21,11 @@ import static org.mockito.Mockito.*;
 /**
  * Test suite for command parsing functionality.
  * Tests prefix detection, bot mention detection, and argument parsing.
- * 
- * Requirements tested:
- * - 1.1: Command identification with configured prefix
- * - 1.2: Command identification with bot mentions
- * - 1.3: Command argument separation and parsing
- * - 1.4: Invalid command handling
- * - 1.5: Custom guild prefix support
- * - 7.5: Malformed command handling
  */
 @ExtendWith(MockitoExtension.class)
 @org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
 @DisplayName("Command Parsing Tests")
+@SuppressWarnings("ResultOfMethodCallIgnored") // static method calls are mocked; return values are unused
 public class CommandParsingTests {
 
     private Commands commands;
@@ -93,8 +86,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should detect command with default prefix")
     void testDefaultPrefixCommandDetection() {
-        // Requirement 1.1: WHEN a message starts with the configured prefix THEN the
-        // system SHALL identify it as a command
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -117,8 +108,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should detect command with custom guild prefix")
     void testCustomGuildPrefixCommandDetection() {
-        // Requirement 1.5: WHEN command prefix is customized per guild THEN the system
-        // SHALL use the correct prefix for command detection
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -161,8 +150,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should detect command with bot mention")
     void testBotMentionCommandDetection() {
-        // Requirement 1.2: WHEN a message mentions the bot THEN the system SHALL
-        // identify it as a command
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -210,8 +197,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should correctly strip prefix from command")
     void testStripCommandPrefix() {
-        // Requirement 1.3: WHEN a command has arguments THEN the system SHALL correctly
-        // parse and separate the command from its arguments
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -300,8 +285,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should handle malformed command gracefully")
     void testMalformedCommandHandling() {
-        // Requirement 7.5: WHEN malformed commands are received THEN the system SHALL
-        // handle them gracefully without crashing
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -395,7 +378,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should handle valid command correctly")
     void testValidCommandHandling() {
-        // Requirement 1.4: Valid commands should be processed normally
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -420,8 +402,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should handle invalid command gracefully")
     void testInvalidCommandHandling() {
-        // Requirement 1.4: WHEN an invalid command is received THEN the system SHALL
-        // handle it gracefully without errors
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -465,8 +445,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should parse command arguments correctly")
     void testArgumentParsing() {
-        // Requirement 1.3: WHEN a command has arguments THEN the system SHALL correctly
-        // parse and separate the command from its arguments
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -490,7 +468,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should handle commands with no arguments - detailed parsing")
     void testCommandWithNoArgumentsDetailed() {
-        // Requirement 1.3: Commands with no arguments should be parsed correctly
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -518,8 +495,10 @@ public class CommandParsingTests {
             assertTrue(commands.isCommand(event), "Should detect command with quoted arguments");
 
             String stripped = commands.stripCommandPrefixOrMentions(event);
-            // Note: The current implementation doesn't handle quotes specially, so this
-            // tests the actual behavior
+
+            // Note: The current implementation doesn't handle quotes specially, so this tests the actual behavior
+            // TODO: maybe we want to have a specific method to build args for the sake of making the testing seem
+            //       more reasonable, (e.g. we shouldn't have to repeat operations from the bot which could change)
             String[] args = stripped.trim().split("\\s+");
 
             assertEquals("play", args[0], "Command should be 'play'");
@@ -571,8 +550,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should validate command format")
     void testCommandFormatValidation() {
-        // Requirement 1.4: WHEN an invalid command is received THEN the system SHALL
-        // handle it gracefully without errors
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
@@ -602,8 +579,6 @@ public class CommandParsingTests {
     @Test
     @DisplayName("Should handle malformed command arguments")
     void testMalformedCommandArguments() {
-        // Requirement 7.5: WHEN malformed commands are received THEN the system SHALL
-        // handle them gracefully without crashing
         try (MockedStatic<Bot> mockedBot = mockStatic(Bot.class)) {
             mockedBot.when(Bot::getClient).thenReturn(mockClient);
 
