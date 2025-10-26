@@ -491,12 +491,14 @@ public class Commands {
     }
 
     public boolean isCommand(MessageCreateEvent event) {
-        return event.getMessage().getContent().startsWith(Commands.getPrefix(event.getGuildId()))
-                || event.getMessage().getUserMentionIds().contains(Bot.getClient().getSelfId());
+        String content = event.getMessage().getContent();
+        return content != null && (content.startsWith(Commands.getPrefix(event.getGuildId()))
+                || event.getMessage().getUserMentionIds().contains(Bot.getClient().getSelfId()));
     }
 
     /**
      * Remove command prefix or bot mentions from the provided message
+     * 
      * @param event MessageCreateEvent with message to strip out prefix/mentions
      * @return a String of the message after striping out the prefix/mentions
      */
