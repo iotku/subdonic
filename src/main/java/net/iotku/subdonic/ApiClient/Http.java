@@ -30,13 +30,6 @@ public class Http {
                 .build();
 
         HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-
-        // 🔍 Debug output
-        System.out.println("PUT " + url);
-        System.out.println("Request body: " + data);
-        System.out.println("Response status: " + resp.statusCode());
-        System.out.println("Response body: " + resp.body());
-
         return resp;
     }
 }
