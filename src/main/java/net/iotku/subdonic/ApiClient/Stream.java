@@ -1,4 +1,4 @@
-package net.iotku.subdonic.client;
+package net.iotku.subdonic.ApiClient;
 
 import net.iotku.subdonic.api.v1.dto.Song;
 

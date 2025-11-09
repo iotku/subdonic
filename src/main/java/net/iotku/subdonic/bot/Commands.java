@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import net.iotku.subdonic.api.v1.dto.Song;
-import net.iotku.subdonic.client.Search;
+import net.iotku.subdonic.ApiClient.Search;
 
 import static net.iotku.subdonic.bot.AudioTrackScheduler.loadTrack;
 import reactor.core.publisher.Flux;

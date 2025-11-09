@@ -3,6 +3,7 @@ package net.iotku.subdonic.bot;
 import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClient;
 import discord4j.core.GatewayDiscordClient;
+import discord4j.core.event.domain.guild.GuildCreateEvent;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.discordjson.json.ApplicationInfoData;
@@ -12,6 +13,8 @@ import discord4j.gateway.intent.IntentSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -19,6 +22,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
+
+import net.iotku.subdonic.ApiClient.Status;
 
 
 @Component
@@ -30,23 +35,37 @@ public class Bot {
 
     private static GatewayDiscordClient client;
     private Long ownerId; // The owner of the bot according to Discord
+    private final String DISCORD_TOKEN;
 
     public Bot(@Value("${discord.token}") String token) {
-        // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
-        client = DiscordClient.create(token)
-                .gateway()
-                .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
-                .login()
-                .block();
-        assert client != null;
-        handleEvents();
-        this.commands = new Commands(this);
-        fetchOwnerId();
-    }
+            // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
+            this.commands = new Commands(this);
+            this.DISCORD_TOKEN = token;
+        }
+
+        @EventListener(ApplicationReadyEvent.class)
+        private void init() {
+            client = DiscordClient.create(DISCORD_TOKEN)
+                    .gateway()
+                    .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
+                    .login()
+                    .block();
+            assert client != null;
+            handleEvents();
+            fetchOwnerId();
+        }
 
     private void handleEvents() {
         client.on(ReadyEvent.class).subscribe(event -> logger.info("Discord client is ready"));
 
+        client.on(GuildCreateEvent.class).subscribe(event -> {
+            logger.info(event.getGuild().toString());
+            try {
+                Status.addGuild(event.getGuild());
+            } catch (IOException | InterruptedException e) {
+                System.out.println("Failed to add guild status" + e);
+            }
+        });
         // React to command chat messages
         client.getEventDispatcher().on(MessageCreateEvent.class)
                 .flatMap(event -> {

@@ -1,4 +1,4 @@
-package net.iotku.subdonic.client;
+package net.iotku.subdonic.ApiClient;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,13 +17,12 @@ import java.util.Collections;
 import java.util.List;
 
 public class Search {
-    private static final String baseUrl = "http://localhost:8080/api/v1/";
     private static final Logger log = LoggerFactory.getLogger(Search.class);
 
     public static List<Song> search3(MessageCtx ctx, String query) throws IOException, InterruptedException {
         ObjectMapper mapper = new ObjectMapper();
-        String url = baseUrl + "subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
-        HttpResponse<String> response = Http.makeRequest(url);
+        String url = Http.baseUrl + "subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
+        HttpResponse<String> response = Http.makeGetRequest(url);
 
         if (response.statusCode() != 200) {
             log.warn("Subsonic search failed: {}", response.body());
@@ -74,8 +73,8 @@ public class Search {
      */
     public static List<Song> random(MessageCtx ctx, int size) throws IOException, InterruptedException {
         ObjectMapper mapper = new ObjectMapper();
-        String url = baseUrl + "subsonic/getRandomSongs?size=" + URLEncoder.encode(Integer.toString(size), StandardCharsets.UTF_8);
-        HttpResponse<String> response = Http.makeRequest(url);
+        String url = Http.baseUrl + "subsonic/getRandomSongs?size=" + URLEncoder.encode(Integer.toString(size), StandardCharsets.UTF_8);
+        HttpResponse<String> response = Http.makeGetRequest(url);
 
         if (response.statusCode() != 200) {
             log.warn("Subsonic random failed: {}", response.body());

@@ -7,7 +7,7 @@ import net.beardbot.subsonic.client.api.search.SearchParams;
 import net.beardbot.subsonic.client.base.SubsonicIncompatibilityException;
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.api.v1.filter.SubsonicFilter;
-import net.iotku.subdonic.client.Http;
+import net.iotku.subdonic.ApiClient.Http;
 import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -118,7 +118,7 @@ public class SubsonicController {
 
         HttpResponse<InputStream> response;
         try {
-            response = Http.makeRequestStream(safeUrl);
+            response = Http.makeGetRequestStream(safeUrl);
         } catch (IOException | InterruptedException e) {
             log.error("Failed to fetch stream for id {}", id, e);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
@@ -148,7 +148,7 @@ public class SubsonicController {
                 .replace(" ", "%20")
                 .replace("&f=xml", "&f=json"); // NOTE: createUrl enforces &f=xml, so we rewrite this
 
-        HttpResponse<String> response = Http.makeRequest(urlStr);
+        HttpResponse<String> response = Http.makeGetRequest(urlStr);
         ObjectMapper mapper = new ObjectMapper();
         JsonNode root = mapper.readTree(response.body());
 
