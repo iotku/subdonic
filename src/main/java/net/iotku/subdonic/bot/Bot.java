@@ -43,6 +43,8 @@ public class Bot {
             this.DISCORD_TOKEN = token;
         }
 
+        // NOTE: We use this EventListener so we ensure that our webserver is ready before starting the bot
+        //       If not, we would have failures updating the status API endpoints
         @EventListener(ApplicationReadyEvent.class)
         private void init() {
             client = DiscordClient.create(DISCORD_TOKEN)
