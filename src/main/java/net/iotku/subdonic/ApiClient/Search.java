@@ -1,7 +1,6 @@
 package net.iotku.subdonic.ApiClient;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import net.iotku.subdonic.api.v1.dto.RankedSong;
 import net.iotku.subdonic.api.v1.dto.Song;
 import net.iotku.subdonic.bot.MessageCtx;
@@ -20,7 +19,6 @@ public class Search {
     private static final Logger log = LoggerFactory.getLogger(Search.class);
 
     public static List<Song> search3(MessageCtx ctx, String query) throws IOException, InterruptedException {
-        ObjectMapper mapper = new ObjectMapper();
         String url = Http.baseUrl + "subsonic/search3?query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
         HttpResponse<String> response = Http.makeGetRequest(url);
 
@@ -31,7 +29,7 @@ public class Search {
 
         List<Song> results;
         try {
-            results = Arrays.asList(mapper.readValue(response.body(), Song[].class));
+            results = Arrays.asList(Http.MAPPER.readValue(response.body(), Song[].class));
             log.info("({}:{}) {}: {} results found for search {}", ctx.guildId().asLong(), ctx.channelId().asLong(), ctx.memberId().asLong(), results.size(), query);
         } catch (JsonProcessingException e) {
             log.error("Failed to parse JSON from Subsonic API", e);
@@ -72,7 +70,6 @@ public class Search {
      *                               for the HTTP request to complete
      */
     public static List<Song> random(MessageCtx ctx, int size) throws IOException, InterruptedException {
-        ObjectMapper mapper = new ObjectMapper();
         String url = Http.baseUrl + "subsonic/getRandomSongs?size=" + URLEncoder.encode(Integer.toString(size), StandardCharsets.UTF_8);
         HttpResponse<String> response = Http.makeGetRequest(url);
 
@@ -83,7 +80,7 @@ public class Search {
 
         List<Song> results;
         try {
-            results = Arrays.asList(mapper.readValue(response.body(), Song[].class));
+            results = Arrays.asList(Http.MAPPER.readValue(response.body(), Song[].class));
             log.info("{} | {} random songs found. Requested {}", ctx, results.size(), size);
         } catch (JsonProcessingException e) {
             log.error("Failed to parse JSON from Subsonic API", e);

@@ -32,7 +32,6 @@ public class Http {
                 .PUT(HttpRequest.BodyPublishers.ofString(data))
                 .build();
 
-        HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-        return resp;
+        return httpClient.send(req, HttpResponse.BodyHandlers.ofString());
     }
 }
