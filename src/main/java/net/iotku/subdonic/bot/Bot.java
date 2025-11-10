@@ -47,6 +47,10 @@ public class Bot {
         //       If not, we would have failures updating the status API endpoints
         @EventListener(ApplicationReadyEvent.class)
         private void init() {
+            if (DISCORD_TOKEN == null) { // This should only be null when testing
+                System.err.println("DISCORD_TOKEN was null, hopefully we're running tests...");
+                return;
+            }
             client = DiscordClient.create(DISCORD_TOKEN)
                     .gateway()
                     .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
