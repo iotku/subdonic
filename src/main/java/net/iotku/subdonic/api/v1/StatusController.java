@@ -1,15 +1,14 @@
 package net.iotku.subdonic.api.v1;
 
-import discord4j.core.object.entity.Guild;
 import org.springframework.web.bind.annotation.*;
 import net.iotku.subdonic.api.v1.dto.DiscordGuild;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/v1/status")
 public class StatusController {
-    List<DiscordGuild> activeServers = new ArrayList<>();
+    Set<DiscordGuild> activeServers = ConcurrentHashMap.newKeySet();
 
     /**
      * Add server to activeServer list
@@ -17,7 +16,6 @@ public class StatusController {
      */
     @PutMapping("/guild/add")
     public boolean add(@RequestBody DiscordGuild guildDTO) {
-        System.out.println("Added guild in status controller: " + guildDTO);
         if (guildDTO == null) {
             System.out.println("JSON deserialization failed.");
             return false;
@@ -26,9 +24,15 @@ public class StatusController {
         return activeServers.add(guildDTO);
     }
 
+    // TODO: /guild/remove
 
+
+    /**
+     * List 'active' DiscordGuild(s)
+     * @return JSON list of DiscordGuild
+     */
     @GetMapping("/guild/list")
-    public List<DiscordGuild> list() {
+    public Set<DiscordGuild> list() {
         return activeServers;
     }
 

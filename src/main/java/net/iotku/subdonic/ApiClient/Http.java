@@ -1,5 +1,7 @@
 package net.iotku.subdonic.ApiClient;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -10,6 +12,7 @@ import java.net.http.HttpResponse;
 public class Http {
     private static final HttpClient httpClient = HttpClient.newHttpClient();
     public static final String baseUrl = "http://localhost:8080/api/v1/";
+    public static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static HttpResponse<String> makeGetRequest(String url) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder().uri(URI.create(url)).GET().build();
