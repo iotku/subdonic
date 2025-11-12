@@ -39,29 +39,29 @@ public class Bot {
     private final String DISCORD_TOKEN;
 
     public Bot(@Value("${discord.token}") String token) {
-            this.commands = new Commands(this);
-            this.DISCORD_TOKEN = token;
+        this.commands = new Commands(this);
+        this.DISCORD_TOKEN = token;
+    }
+
+    // NOTE: We use this EventListener so we ensure that our webserver is ready before starting the bot
+    //       If not, we would have failures updating the status API endpoints
+    @EventListener(ApplicationReadyEvent.class)
+    private void init() {
+        if (DISCORD_TOKEN == null) { // This should only be null when testing
+            System.err.println("DISCORD_TOKEN was null: (!) NOT STARTING BOT (!), hopefully we're running tests...");
+            return;
         }
 
-        // NOTE: We use this EventListener so we ensure that our webserver is ready before starting the bot
-        //       If not, we would have failures updating the status API endpoints
-        @EventListener(ApplicationReadyEvent.class)
-        private void init() {
-            if (DISCORD_TOKEN == null) { // This should only be null when testing
-                System.err.println("DISCORD_TOKEN was null: (!) NOT STARTING BOT (!), hopefully we're running tests...");
-                return;
-            }
-
-            // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
-            client = DiscordClient.create(DISCORD_TOKEN)
-                    .gateway()
-                    .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
-                    .login()
-                    .block();
-            assert client != null;
-            handleEvents();
-            fetchOwnerId();
-        }
+        // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
+        client = DiscordClient.create(DISCORD_TOKEN)
+                .gateway()
+                .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
+                .login()
+                .block();
+        assert client != null;
+        handleEvents();
+        fetchOwnerId();
+    }
 
     private void handleEvents() {
         client.on(ReadyEvent.class).subscribe(event -> logger.info("Discord client is ready"));
