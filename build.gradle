@@ -26,6 +26,7 @@ dependencies {
     implementation 'com.google.protobuf:protobuf-java:3.25.8' // Dependency of discord4j-voice:3.3.0
 
     // Main dependencies
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation "me.paulschwarz:spring-dotenv:4.0.0"
 	implementation "com.discord4j:discord4j-core:3.3.0"

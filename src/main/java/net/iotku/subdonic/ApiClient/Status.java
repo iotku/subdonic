@@ -20,4 +20,18 @@ public class Status {
 
         return resp;
     }
+
+    public static HttpResponse<String> removeGuild(Guild guild) throws IOException, InterruptedException {
+        String url = Http.baseUrl + "status/guild/remove";
+
+        String json = Http.MAPPER.writeValueAsString(DiscordGuild.fromNativeGuild(guild));
+        HttpResponse<String> resp = Http.makePutRequest(url, json);
+
+        if (resp.statusCode() >= 400) {
+            System.err.println("Failed to remove guild! Server returned: "
+                    + resp.statusCode() + " " + resp.body());
+        }
+
+        return resp;
+    }
 }

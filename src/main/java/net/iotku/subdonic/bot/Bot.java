@@ -4,6 +4,7 @@ import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClient;
 import discord4j.core.GatewayDiscordClient;
 import discord4j.core.event.domain.guild.GuildCreateEvent;
+import discord4j.core.event.domain.guild.GuildDeleteEvent;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
 import discord4j.discordjson.json.ApplicationInfoData;
@@ -38,7 +39,6 @@ public class Bot {
     private final String DISCORD_TOKEN;
 
     public Bot(@Value("${discord.token}") String token) {
-            // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
             this.commands = new Commands(this);
             this.DISCORD_TOKEN = token;
         }
@@ -48,9 +48,11 @@ public class Bot {
         @EventListener(ApplicationReadyEvent.class)
         private void init() {
             if (DISCORD_TOKEN == null) { // This should only be null when testing
-                System.err.println("DISCORD_TOKEN was null, hopefully we're running tests...");
+                System.err.println("DISCORD_TOKEN was null: (!) NOT STARTING BOT (!), hopefully we're running tests...");
                 return;
             }
+
+            // NOTE: Must have "Message Content Intent" enabled in developer dev portal bot settings
             client = DiscordClient.create(DISCORD_TOKEN)
                     .gateway()
                     .setEnabledIntents(IntentSet.nonPrivileged().or(IntentSet.of(Intent.MESSAGE_CONTENT)))
@@ -72,6 +74,18 @@ public class Bot {
                 System.out.println("Failed to add guild status" + e);
             }
         });
+
+        client.on(GuildDeleteEvent.class).subscribe(guildDeleteEvent -> {
+            logger.info("Removed from guild: {} | {}", guildDeleteEvent.getGuildId(), guildDeleteEvent.getGuild());
+            try {
+                if (guildDeleteEvent.getGuild().isPresent()) {
+                    Status.removeGuild(guildDeleteEvent.getGuild().get());
+                }
+            } catch (IOException | InterruptedException e) {
+                System.out.println("Failed to remove guild status" + e);
+            }
+        });
+
         // React to command chat messages
         client.getEventDispatcher().on(MessageCreateEvent.class)
                 .flatMap(event -> {

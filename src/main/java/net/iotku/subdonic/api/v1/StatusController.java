@@ -24,8 +24,15 @@ public class StatusController {
         return activeServers.add(guildDTO);
     }
 
-    // TODO: /guild/remove
+    @PutMapping("/guild/remove")
+    public boolean remove(@RequestBody DiscordGuild guildDTO) {
+        if (guildDTO == null) {
+            System.out.println("JSON deserialization failed.");
+            return false;
+        }
 
+        return activeServers.remove(guildDTO);
+    }
 
     /**
      * List 'active' DiscordGuild(s)

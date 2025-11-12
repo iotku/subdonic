@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <title>Subdonic</title>
+</head>
+<body>
+<div id="guildList"
+     hx-get="/api/v1/status/guild/list"
+     hx-trigger="load, every 2s"
+     hx-swap="none"
+     hx-on::after-request="renderGuildList(event.detail.xhr.response)">
+</div>
+
+<ul id="guilds"></ul>
+
+<script>
+    function renderGuildList(responseText) {
+      const guilds = JSON.parse(responseText);
+      const list = document.getElementById("guilds");
+      list.innerHTML = guilds.map(g =>
+        `<li><strong>${g.name}</strong> — ${g.memberCount} members</li>`
+      ).join("");
+    }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
+</body>
+</html>
