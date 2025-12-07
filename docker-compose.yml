@@ -8,5 +8,5 @@ services:
    #   SUBSONIC_URL: "https://your-subsonic-server"
    #   SUBSONIC_USER: "username"
    #   SUBSONIC_PASS: "password123"
-    #ports:
-    #  - "8080:8080" # Expose Springboot port, optional
+    ports:
+      - "8080:8080" # Expose Springboot port, optional
