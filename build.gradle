@@ -1,12 +1,12 @@
 plugins {
 	id 'java'
     id 'application'
-	id 'org.springframework.boot' version '3.5.6'
+	id 'org.springframework.boot' version '4.0.6'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'net.iotku'
-version = '0.0.1-SNAPSHOT'
+version = '0.0.2-SNAPSHOT'
 description = 'Discord Subsonic Bot'
 
 java {
@@ -17,23 +17,36 @@ java {
 
 repositories {
 	mavenCentral()
-	maven { url "https://jitpack.io" } // For com.github.walkyst.JAADec-fork:jaadec-ext-aac & ibxm-fork:com.github.walkyst:ibxm-fork
+	maven {
+		url "https://jitpack.io"
+	} // For com.github.walkyst.JAADec-fork:jaadec-ext-aac & ibxm-fork:com.github.walkyst:ibxm-fork
+
+	maven {
+		url = uri("https://maven.lavalink.dev/snapshots")
+	}
 }
 
 dependencies {
     // Updated implementations of sub-dependencies for security fixes
     // ensure these are kept up to date or otherwise still needed (e.g. main dependency hasn't updated it)
-    implementation 'com.google.protobuf:protobuf-java:3.25.8' // Dependency of discord4j-voice:3.3.0
+//    implementation 'com.google.protobuf:protobuf-java:3.25.8' // Dependency of discord4j-voice:3.3.0
 
     // Main dependencies
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation "me.paulschwarz:spring-dotenv:4.0.0"
-	implementation "com.discord4j:discord4j-core:3.3.0"
-	implementation 'dev.arbjerg:lavaplayer:2.2.4'
+	implementation(platform("me.paulschwarz:spring-dotenv-bom:5.1.0"))
+	implementation("me.paulschwarz:springboot4-dotenv")
+	implementation "com.discord4j:discord4j-core:3.3.2"
+	implementation 'dev.arbjerg:lavaplayer:2.2.6'
 	implementation 'net.beardbot:subsonic-client:0.6.0'
+	implementation("io.netty:netty-buffer:4.2.10.Final")
+	implementation("moe.kyokobot.libdave:impl-jni:0.1.2")
+	implementation("moe.kyokobot.libdave:natives-linux-musl-x86-64:0.1.2")
+	implementation("moe.kyokobot.libdave:natives-linux-x86-64:0.1.2")
+	implementation("moe.kyokobot.libdave:natives-linux-x86:0.1.2")
+	implementation("moe.kyokobot.libdave:natives-darwin:0.1.2")
 
-    // JAXB for net.beardbot:subsonic-client
+// JAXB for net.beardbot:subsonic-client
 	implementation 'javax.xml.bind:jaxb-api:2.3.1'
 	implementation 'org.glassfish.jaxb:jaxb-runtime:2.3.1'
 	implementation 'javax.activation:activation:1.1'
