@@ -11,10 +11,7 @@ import net.iotku.subdonic.ApiClient.Http;
 import net.iotku.subdonic.subsonic.SubsonicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -110,7 +107,7 @@ public class SubsonicController {
      * @return Stream of audio data provided by the subsonic server
      */
     @GetMapping("/stream/{id}")
-    public ResponseEntity<InputStreamResource> proxyStream(@PathVariable String id) {
+    public String proxyStream(@PathVariable String id) {
         // ! NOTE: spaces in the URL (e.g. from the subsonic client name) will DOOM YOU !
         String safeUrl = subsonic.media().stream(id).getUrl()
                 .toString()
@@ -133,9 +130,7 @@ public class SubsonicController {
             );
         }
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new InputStreamResource(response.body()));
+        return safeUrl; // TODO: This exposes subsonic credentials!!!
     }
 
 
